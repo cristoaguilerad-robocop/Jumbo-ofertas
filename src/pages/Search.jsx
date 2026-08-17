@@ -1,0 +1,158 @@
+import { useState, useEffect, useRef } from 'react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
+import { getProductByBarcode } from '../data/mockProducts'
+import { CATEGORIES } from '../data/mockProducts'
+import { useProducts } from '../hooks/useProducts'
+import ProductCard from '../components/ProductCard'
+import BarcodeScanner from '../components/BarcodeScanner'
+import EmptyState from '../components/EmptyState'
+
+export default function Search() {
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const inputRef = useRef(null)
+  const [showScanner, setShowScanner] = useState(false)
+  const [scanError, setScanError] = useState(null)
+
+  const { query, setQuery, category, setCategory, onlyOffers, setOnlyOffers, results } = useProducts()
+
+  useEffect(() => {
+    if (searchParams.get('scanner') === '1') {
+      setShowScanner(true)
+    }
+    if (searchParams.get('offers') === '1') {
+      setOnlyOffers(true)
+    }
+  }, []) // eslint-disable-line
+
+  useEffect(() => {
+    if (!showScanner) {
+      setTimeout(() => inputRef.current?.focus(), 300)
+    }
+  }, [showScanner])
+
+  function handleBarcodeDetected(barcode) {
+    setShowScanner(false)
+    setScanError(null)
+    const product = getProductByBarcode(barcode)
+    if (product) {
+      navigate(`/product/${product.id}`)
+    } else {
+      setScanError(`Código ${barcode} no encontrado en el catálogo.`)
+      setQuery(barcode)
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-950 pb-24">
+      {showScanner && (
+        <BarcodeScanner
+          onDetected={handleBarcodeDetected}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
+
+      {/* Header */}
+      <div className="bg-gray-900 px-4 pt-safe pt-6 pb-4 sticky top-0 z-40">
+        <div className="max-w-lg mx-auto space-y-3">
+          {/* Search bar */}
+          <div className="flex gap-2">
+            <div className="flex-1 relative">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clipRule="evenodd" />
+              </svg>
+              <input
+                ref={inputRef}
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Buscar productos..."
+                className="w-full bg-gray-800 text-white placeholder-gray-500 rounded-xl pl-9 pr-4 py-3 text-sm outline-none focus:ring-2 focus:ring-green-500"
+              />
+              {query && (
+                <button
+                  onClick={() => setQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                    <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                  </svg>
+                </button>
+              )}
+            </div>
+
+            {/* Scanner button */}
+            <button
+              onClick={() => setShowScanner(true)}
+              className="bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl px-3 py-3 flex items-center justify-center"
+              aria-label="Escanear código de barras"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                <path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h3A1.5 1.5 0 0 1 9 4.5v3A1.5 1.5 0 0 1 7.5 9h-3A1.5 1.5 0 0 1 3 7.5v-3ZM3 16.5A1.5 1.5 0 0 1 4.5 15h3A1.5 1.5 0 0 1 9 16.5v3A1.5 1.5 0 0 1 7.5 21h-3A1.5 1.5 0 0 1 3 19.5v-3ZM15 4.5A1.5 1.5 0 0 1 16.5 3h3A1.5 1.5 0 0 1 21 4.5v3A1.5 1.5 0 0 1 19.5 9h-3A1.5 1.5 0 0 1 15 7.5v-3ZM15 16.5A1.5 1.5 0 0 1 16.5 15h3A1.5 1.5 0 0 1 21 16.5v3A1.5 1.5 0 0 1 19.5 21h-3A1.5 1.5 0 0 1 15 19.5v-3Z" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Offers toggle */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setOnlyOffers(!onlyOffers)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                onlyOffers
+                  ? 'bg-orange-500 text-white'
+                  : 'bg-gray-800 text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              <span>🏷️</span>
+              Solo ofertas
+            </button>
+          </div>
+
+          {/* Category chips */}
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {CATEGORIES.map(cat => (
+              <button
+                key={cat}
+                onClick={() => setCategory(cat)}
+                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  category === cat
+                    ? 'bg-green-500 text-white'
+                    : 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-lg mx-auto px-4 pt-4 space-y-2">
+        {scanError && (
+          <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 text-sm text-orange-400">
+            {scanError}
+          </div>
+        )}
+
+        {results.length === 0 ? (
+          <EmptyState
+            icon="🔍"
+            title="Sin resultados"
+            description="Intenta con otro nombre o escanea el código de barras del producto."
+          />
+        ) : (
+          <>
+            <p className="text-gray-500 text-xs px-1">
+              {results.length} {results.length === 1 ? 'producto' : 'productos'}
+              {onlyOffers ? ' en oferta' : ''}
+            </p>
+            {results.map(product => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
