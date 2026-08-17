@@ -1,9 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { signInAnonymously, onAuthStateChanged } from 'firebase/auth'
-import {
-  collection, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp
-} from 'firebase/firestore'
-import { auth, db, isConfigured } from '../firebase'
+import { supabase, isConfigured } from '../supabase'
 
 const AppContext = createContext(null)
 
@@ -29,61 +25,102 @@ export function AppProvider({ children }) {
   const [authLoading, setAuthLoading] = useState(true)
   const [shoppingList, setShoppingList] = useState({})
 
-  // Auth
+  // Auth — anonymous session via Supabase
   useEffect(() => {
     if (!isConfigured) {
       setAuthLoading(false)
       setShoppingList(loadLocalList())
       return
     }
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      if (u) {
-        setUser(u)
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setUser(session.user)
       } else {
-        try {
-          await signInAnonymously(auth)
-        } catch (err) {
-          console.error('Auth error:', err)
-        }
+        supabase.auth.signInAnonymously().then(({ data, error }) => {
+          if (!error) setUser(data.user)
+        })
       }
       setAuthLoading(false)
     })
-    return unsub
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
-  // Firestore sync
+  // Load list and subscribe to real-time changes
   useEffect(() => {
     if (!isConfigured || !user) return
 
-    const ref = collection(db, 'users', user.uid, 'shoppingList')
-    const unsub = onSnapshot(ref, (snap) => {
-      const items = {}
-      snap.forEach(d => { items[d.id] = d.data() })
-      setShoppingList(items)
-    })
-    return unsub
+    // Initial fetch
+    supabase
+      .from('shopping_list')
+      .select('*')
+      .eq('user_id', user.id)
+      .then(({ data, error }) => {
+        if (error) { console.error(error); return }
+        const items = {}
+        data.forEach(row => { items[row.product_id] = row })
+        setShoppingList(items)
+      })
+
+    // Real-time subscription
+    const channel = supabase
+      .channel('shopping_list_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'shopping_list', filter: `user_id=eq.${user.id}` },
+        () => {
+          // Re-fetch on any change
+          supabase
+            .from('shopping_list')
+            .select('*')
+            .eq('user_id', user.id)
+            .then(({ data }) => {
+              if (!data) return
+              const items = {}
+              data.forEach(row => { items[row.product_id] = row })
+              setShoppingList(items)
+            })
+        }
+      )
+      .subscribe()
+
+    return () => supabase.removeChannel(channel)
   }, [user])
 
   const addToList = useCallback(async (product) => {
     const item = {
-      productId: product.id,
+      product_id: product.id,
       name: product.name,
       category: product.category,
       barcode: product.barcode,
-      regularPrice: product.regularPrice,
-      priceWhenAdded: product.currentPrice,
+      regular_price: product.regularPrice,
+      price_when_added: product.currentPrice,
       unit: product.unit,
-      addedAt: new Date().toISOString(),
-      targetPrice: null,
+      added_at: new Date().toISOString(),
     }
 
     if (isConfigured && user) {
-      await setDoc(doc(db, 'users', user.uid, 'shoppingList', product.id), {
-        ...item,
-        addedAt: serverTimestamp(),
-      })
+      const { error } = await supabase
+        .from('shopping_list')
+        .upsert({ ...item, user_id: user.id }, { onConflict: 'user_id,product_id' })
+      if (error) console.error(error)
     } else {
-      const updated = { ...shoppingList, [product.id]: item }
+      const localItem = {
+        productId: product.id,
+        name: product.name,
+        category: product.category,
+        barcode: product.barcode,
+        regularPrice: product.regularPrice,
+        priceWhenAdded: product.currentPrice,
+        unit: product.unit,
+        addedAt: new Date().toISOString(),
+      }
+      const updated = { ...shoppingList, [product.id]: localItem }
       setShoppingList(updated)
       saveLocalList(updated)
     }
@@ -91,7 +128,11 @@ export function AppProvider({ children }) {
 
   const removeFromList = useCallback(async (productId) => {
     if (isConfigured && user) {
-      await deleteDoc(doc(db, 'users', user.uid, 'shoppingList', productId))
+      await supabase
+        .from('shopping_list')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('product_id', productId)
     } else {
       const updated = { ...shoppingList }
       delete updated[productId]
@@ -104,11 +145,27 @@ export function AppProvider({ children }) {
     return !!shoppingList[productId]
   }, [shoppingList])
 
+  // Normalize Supabase rows to the same shape as local items
+  const normalizedList = {}
+  Object.values(shoppingList).forEach(item => {
+    const id = item.product_id || item.productId
+    normalizedList[id] = {
+      productId: id,
+      name: item.name,
+      category: item.category,
+      barcode: item.barcode,
+      regularPrice: item.regular_price ?? item.regularPrice,
+      priceWhenAdded: item.price_when_added ?? item.priceWhenAdded,
+      unit: item.unit,
+      addedAt: item.added_at ?? item.addedAt,
+    }
+  })
+
   return (
     <AppContext.Provider value={{
       user,
       authLoading,
-      shoppingList,
+      shoppingList: normalizedList,
       addToList,
       removeFromList,
       isInList,
