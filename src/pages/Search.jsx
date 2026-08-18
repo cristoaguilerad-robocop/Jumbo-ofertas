@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { getProductByBarcode } from '../data/mockProducts'
 import { CATEGORIES } from '../data/mockProducts'
-import { useProducts } from '../hooks/useProducts'
+import { useProducts, searchByBarcode } from '../hooks/useProducts'
 import ProductCard from '../components/ProductCard'
 import BarcodeScanner from '../components/BarcodeScanner'
 import EmptyState from '../components/EmptyState'
@@ -13,33 +12,29 @@ export default function Search() {
   const inputRef = useRef(null)
   const [showScanner, setShowScanner] = useState(false)
   const [scanError, setScanError] = useState(null)
+  const [scanLoading, setScanLoading] = useState(false)
 
-  const { query, setQuery, category, setCategory, onlyOffers, setOnlyOffers, results } = useProducts()
+  const { query, setQuery, category, setCategory, onlyOffers, setOnlyOffers, results, loading, isLive } = useProducts()
 
   useEffect(() => {
-    if (searchParams.get('scanner') === '1') {
-      setShowScanner(true)
-    }
-    if (searchParams.get('offers') === '1') {
-      setOnlyOffers(true)
-    }
+    if (searchParams.get('scanner') === '1') setShowScanner(true)
+    if (searchParams.get('offers') === '1') setOnlyOffers(true)
   }, []) // eslint-disable-line
 
   useEffect(() => {
-    if (!showScanner) {
-      setTimeout(() => inputRef.current?.focus(), 300)
-    }
+    if (!showScanner) setTimeout(() => inputRef.current?.focus(), 300)
   }, [showScanner])
 
-  function handleBarcodeDetected(barcode) {
+  async function handleBarcodeDetected(barcode) {
     setShowScanner(false)
     setScanError(null)
-    const product = getProductByBarcode(barcode)
+    setScanLoading(true)
+    const product = await searchByBarcode(barcode)
+    setScanLoading(false)
     if (product) {
-      navigate(`/product/${product.id}`)
+      navigate(`/product/${product.id}`, { state: { product } })
     } else {
-      setScanError(`Código ${barcode} no encontrado en el catálogo.`)
-      setQuery(barcode)
+      setScanError(`Código ${barcode} no encontrado en Jumbo ni en el catálogo.`)
     }
   }
 
@@ -55,7 +50,6 @@ export default function Search() {
       {/* Header */}
       <div className="bg-gray-900 px-4 pt-safe pt-6 pb-4 sticky top-0 z-40">
         <div className="max-w-lg mx-auto space-y-3">
-          {/* Search bar */}
           <div className="flex gap-2">
             <div className="flex-1 relative">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
@@ -67,26 +61,25 @@ export default function Search() {
                 type="text"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                placeholder="Buscar productos..."
+                placeholder="Buscar en Jumbo..."
                 className="w-full bg-gray-800 text-white placeholder-gray-500 rounded-xl pl-9 pr-4 py-3 text-sm outline-none focus:ring-2 focus:ring-green-500"
               />
-              {query && (
-                <button
-                  onClick={() => setQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
-                >
+              {(loading || scanLoading) && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
+              {query && !loading && (
+                <button onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
                     <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
                   </svg>
                 </button>
               )}
             </div>
-
-            {/* Scanner button */}
             <button
               onClick={() => setShowScanner(true)}
-              className="bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl px-3 py-3 flex items-center justify-center"
-              aria-label="Escanear código de barras"
+              className="bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl px-3 flex items-center justify-center"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
                 <path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h3A1.5 1.5 0 0 1 9 4.5v3A1.5 1.5 0 0 1 7.5 9h-3A1.5 1.5 0 0 1 3 7.5v-3ZM3 16.5A1.5 1.5 0 0 1 4.5 15h3A1.5 1.5 0 0 1 9 16.5v3A1.5 1.5 0 0 1 7.5 21h-3A1.5 1.5 0 0 1 3 19.5v-3ZM15 4.5A1.5 1.5 0 0 1 16.5 3h3A1.5 1.5 0 0 1 21 4.5v3A1.5 1.5 0 0 1 19.5 9h-3A1.5 1.5 0 0 1 15 7.5v-3ZM15 16.5A1.5 1.5 0 0 1 16.5 15h3A1.5 1.5 0 0 1 21 16.5v3A1.5 1.5 0 0 1 19.5 21h-3A1.5 1.5 0 0 1 15 19.5v-3Z" />
@@ -94,31 +87,30 @@ export default function Search() {
             </button>
           </div>
 
-          {/* Offers toggle */}
           <div className="flex items-center gap-3">
             <button
               onClick={() => setOnlyOffers(!onlyOffers)}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                onlyOffers
-                  ? 'bg-orange-500 text-white'
-                  : 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                onlyOffers ? 'bg-orange-500 text-white' : 'bg-gray-800 text-gray-400'
               }`}
             >
-              <span>🏷️</span>
-              Solo ofertas
+              🏷️ Solo ofertas
             </button>
+            {isLive && (
+              <span className="text-xs text-green-400 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 bg-green-400 rounded-full inline-block" />
+                Precios Jumbo en tiempo real
+              </span>
+            )}
           </div>
 
-          {/* Category chips */}
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
             {CATEGORIES.map(cat => (
               <button
                 key={cat}
                 onClick={() => setCategory(cat)}
                 className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                  category === cat
-                    ? 'bg-green-500 text-white'
-                    : 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                  category === cat ? 'bg-green-500 text-white' : 'bg-gray-800 text-gray-400'
                 }`}
               >
                 {cat}
@@ -135,17 +127,26 @@ export default function Search() {
           </div>
         )}
 
-        {results.length === 0 ? (
+        {scanLoading && (
+          <div className="flex items-center justify-center py-10 gap-3">
+            <div className="w-6 h-6 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+            <p className="text-gray-400 text-sm">Buscando en Jumbo...</p>
+          </div>
+        )}
+
+        {!scanLoading && results.length === 0 && !loading && (
           <EmptyState
             icon="🔍"
             title="Sin resultados"
             description="Intenta con otro nombre o escanea el código de barras del producto."
           />
-        ) : (
+        )}
+
+        {!scanLoading && results.length > 0 && (
           <>
             <p className="text-gray-500 text-xs px-1">
               {results.length} {results.length === 1 ? 'producto' : 'productos'}
-              {onlyOffers ? ' en oferta' : ''}
+              {isLive ? ' desde Jumbo' : ' en catálogo local'}
             </p>
             {results.map(product => (
               <ProductCard key={product.id} product={product} />
