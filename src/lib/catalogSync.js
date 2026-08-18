@@ -3,7 +3,11 @@ import { fetchCategories, fetchCategory } from './jumboApi'
 import { excludedBy, prettifySlug } from './catalogFilters'
 
 const UPSERT_BATCH = 400
-const THROTTLE_MS = 300
+const THROTTLE_MS = 150
+// Cuántas categorías se recorren a la vez. El tiempo se va casi todo esperando
+// la red, así que unas pocas en paralelo multiplican el rendimiento sin
+// castigar a jumbo.cl.
+const CONCURRENCY = 4
 // Tope por categoría: acota el tiempo total y evita quedarse pegado si la
 // paginación de Jumbo nunca deja de responder.
 const MAX_PAGES_PER_CATEGORY = 40
@@ -58,6 +62,20 @@ async function upsertProducts(products, categoryPath) {
  * categoría, así que si se corta, la siguiente corrida retoma donde quedó.
  * Se excluyen las secciones definidas en catalogFilters.
  */
+/**
+ * Deja fuera las categorías que tienen subcategorías: sus productos ya salen
+ * al recorrer las hojas, y el padre además tope antes por MAX_PAGES.
+ */
+function leafCategories(paths) {
+  const set = new Set(paths)
+  return paths.filter(p => {
+    for (const other of set) {
+      if (other !== p && other.startsWith(`${p}/`)) return false
+    }
+    return true
+  })
+}
+
 export async function syncCatalog({ onProgress, signal, restart = false } = {}) {
   if (!isConfigured) throw new Error('Supabase no está configurado')
 
@@ -70,72 +88,105 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
   }
 
   const excluded = []
-  const categories = []
+  const included = []
   for (const path of allCategories) {
     const section = excludedBy(path)
     if (section) excluded.push({ path, section })
-    else categories.push(path)
+    else included.push(path)
   }
+  const categories = leafCategories(included)
 
   const saved = restart ? null : loadProgress()
   const done = new Set(saved?.doneCategories || [])
   let totalSaved = saved?.totalSaved || 0
   let failed = saved?.failed || 0
 
+  const startedAt = Date.now()
+  const alreadyDone = done.size
+
   const base = {
     phase: 'crawling',
     totalCategories: categories.length,
     excludedCount: excluded.length,
     excludedSections: [...new Set(excluded.map(e => e.section))],
+    skippedParents: included.length - categories.length,
     discovery: stats,
   }
-  report({ ...base, doneCategories: done.size, totalSaved, failed })
 
-  for (const categoryPath of categories) {
-    if (signal?.aborted) throw new DOMException('Sincronización cancelada', 'AbortError')
-    if (done.has(categoryPath)) continue
-
-    report({ ...base, currentCategory: categoryPath, doneCategories: done.size, totalSaved, failed })
-
-    try {
-      const seen = new Set()
-      for (let page = 1; page <= MAX_PAGES_PER_CATEGORY; page++) {
-        if (signal?.aborted) throw new DOMException('Sincronización cancelada', 'AbortError')
-
-        const products = await fetchCategory(categoryPath, page, signal)
-        if (!products.length) break
-
-        // Si la página no aporta nada nuevo, la paginación ya dio la vuelta.
-        const fresh = products.filter(p => !seen.has(p.id))
-        if (!fresh.length) break
-        fresh.forEach(p => seen.add(p.id))
-
-        await upsertProducts(fresh, categoryPath)
-        totalSaved += fresh.length
-
-        report({
-          ...base,
-          currentCategory: categoryPath,
-          currentPage: page,
-          doneCategories: done.size,
-          totalSaved,
-          failed,
-        })
-
-        await sleep(THROTTLE_MS)
-      }
-    } catch (err) {
-      if (err.name === 'AbortError') throw err
-      failed += 1
+  const snapshot = extra => {
+    const elapsedMin = (Date.now() - startedAt) / 60000
+    const progressed = done.size - alreadyDone
+    const perMin = elapsedMin > 0.2 ? progressed / elapsedMin : 0
+    return {
+      ...base,
+      doneCategories: done.size,
+      totalSaved,
+      failed,
+      productsPerMin: elapsedMin > 0.2 ? Math.round(totalSaved / elapsedMin) : null,
+      etaMin: perMin > 0 ? Math.round((categories.length - done.size) / perMin) : null,
+      ...extra,
     }
-
-    done.add(categoryPath)
-    saveProgress({ doneCategories: [...done], totalSaved, failed })
-    await sleep(THROTTLE_MS)
   }
 
-  report({ ...base, phase: 'done', doneCategories: done.size, totalSaved, failed })
-  return { totalSaved, failed, categories: categories.length, excluded: excluded.length }
+  report(snapshot())
+
+  const active = new Set()
+  let cursor = 0
+
+  async function crawlOne(categoryPath) {
+    const seen = new Set()
+    for (let page = 1; page <= MAX_PAGES_PER_CATEGORY; page++) {
+      if (signal?.aborted) throw new DOMException('Sincronización cancelada', 'AbortError')
+
+      const products = await fetchCategory(categoryPath, page, signal)
+      if (!products.length) break
+
+      // Si la página no aporta nada nuevo, la paginación ya dio la vuelta.
+      const fresh = products.filter(p => !seen.has(p.id))
+      if (!fresh.length) break
+      fresh.forEach(p => seen.add(p.id))
+
+      await upsertProducts(fresh, categoryPath)
+      totalSaved += fresh.length
+      report(snapshot({ currentCategory: [...active][0], currentPage: page }))
+
+      await sleep(THROTTLE_MS)
+    }
+  }
+
+  async function worker() {
+    while (cursor < categories.length) {
+      if (signal?.aborted) throw new DOMException('Sincronización cancelada', 'AbortError')
+
+      const categoryPath = categories[cursor++]
+      if (done.has(categoryPath)) continue
+
+      active.add(categoryPath)
+      report(snapshot({ currentCategory: categoryPath }))
+      try {
+        await crawlOne(categoryPath)
+      } catch (err) {
+        if (err.name === 'AbortError') throw err
+        failed += 1
+      } finally {
+        active.delete(categoryPath)
+      }
+
+      done.add(categoryPath)
+      saveProgress({ doneCategories: [...done], totalSaved, failed })
+      await sleep(THROTTLE_MS)
+    }
+  }
+
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker))
+
+  report(snapshot({ phase: 'done' }))
+  return {
+    totalSaved,
+    failed,
+    categories: categories.length,
+    excluded: excluded.length,
+  }
 }
 
 /** Cantidad de productos indexados, o null si la tabla no es legible. */

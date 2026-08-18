@@ -172,6 +172,25 @@ export default function SyncCatalog() {
                   {progress?.doneCategories || 0} / {progress?.totalCategories || '—'}
                 </p>
               </div>
+              {progress?.productsPerMin > 0 && (
+                <div>
+                  <p className="text-gray-500 text-xs">Velocidad</p>
+                  <p className="text-white font-bold">
+                    {progress.productsPerMin.toLocaleString('es-CL')}
+                    <span className="text-gray-400 font-normal text-xs"> /min</span>
+                  </p>
+                </div>
+              )}
+              {progress?.etaMin > 0 && (
+                <div>
+                  <p className="text-gray-500 text-xs">Tiempo restante</p>
+                  <p className="text-white font-bold">
+                    ~{progress.etaMin < 60
+                      ? `${progress.etaMin} min`
+                      : `${Math.floor(progress.etaMin / 60)} h ${progress.etaMin % 60} min`}
+                  </p>
+                </div>
+              )}
             </div>
 
             {progress?.currentCategory && (
@@ -186,6 +205,8 @@ export default function SyncCatalog() {
                 {progress.excludedSections?.length
                   ? ` (${progress.excludedSections.map(s => SECTION_LABELS[s] || s).join(', ')})`
                   : ''}
+                {progress.skippedParents > 0 &&
+                  ` · ${progress.skippedParents} categorías padre omitidas por redundancia`}
               </p>
             )}
             {progress?.failed > 0 && (
