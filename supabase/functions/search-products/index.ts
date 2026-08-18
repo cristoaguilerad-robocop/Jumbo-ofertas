@@ -324,7 +324,7 @@ Deno.serve(async (req: Request) => {
     const path = url.searchParams.get('path')
     if (!path) {
       return new Response(
-        JSON.stringify({ error: 'Usa ?search=, ?category=, ?path= o ?discover=2' }),
+        JSON.stringify({ error: 'Usa ?search=, ?category=, ?categories=1, ?benchmark=1 o ?path=' }),
         { status: 400, headers: JSON_HEADERS }
       )
     }
