@@ -250,6 +250,73 @@ async function discoverCategories() {
   }
 }
 
+/**
+ * Busca la clave de Constructor.io y prueba su API de búsqueda.
+ *
+ * Constructor.io es el motor de búsqueda de Jumbo. Su API devuelve JSON
+ * compacto en vez de páginas de ~900 KB, así que si la clave sirve, el crawl
+ * baja de minutos a segundos. La clave no está en el HTML de jumbo.cl sino
+ * dentro del bundle que sirven desde cnstrc.com.
+ */
+async function probeConstructor() {
+  const bundles = [
+    'https://cnstrc.com/js/cust/cencosud_0BmS-e.js',
+    'https://ac.cnstrc.com/js/cust/cencosud_0BmS-e.js',
+  ]
+
+  const candidates = new Set<string>()
+  const bundleInfo = []
+  for (const b of bundles) {
+    try {
+      const res = await fetch(b, { headers: UPSTREAM_HEADERS })
+      const js = await res.text()
+      bundleInfo.push({ url: b, status: res.status, kb: Math.round(js.length / 1024) })
+      if (!res.ok) continue
+      for (const m of js.matchAll(/key_[A-Za-z0-9_-]{6,}/g)) candidates.add(m[0])
+      for (const m of js.matchAll(/["'](?:apiKey|api_key|indexKey|key)["']\s*:\s*["']([A-Za-z0-9_-]{8,})["']/g)) {
+        candidates.add(m[1])
+      }
+    } catch (err) {
+      bundleInfo.push({ url: b, error: String(err) })
+    }
+  }
+
+  const tests = []
+  for (const key of [...candidates].slice(0, 8)) {
+    const api = `https://ac.cnstrc.com/search/leche?key=${encodeURIComponent(key)}`
+      + '&i=00000000-0000-4000-8000-000000000000&s=1&c=ciojs-client-2.35.0'
+      + '&num_results_per_page=100&page=1'
+    try {
+      const res = await fetch(api, { headers: { Accept: 'application/json', Referer: `${ORIGIN}/` } })
+      const body = await res.text()
+      let results = null
+      let total = null
+      try {
+        const json = JSON.parse(body)
+        results = json?.response?.results?.length ?? null
+        total = json?.response?.total_num_results ?? null
+      } catch { /* no era JSON */ }
+      tests.push({
+        key,
+        status: res.status,
+        kb: Math.round(body.length / 1024),
+        results,
+        total,
+        kbPerProduct: results ? Math.round((body.length / 1024 / results) * 100) / 100 : null,
+        preview: results ? undefined : body.slice(0, 200),
+      })
+    } catch (err) {
+      tests.push({ key, error: String(err) })
+    }
+  }
+
+  return {
+    bundles: bundleInfo,
+    candidateKeys: [...candidates].slice(0, 20),
+    tests: tests.sort((a, b) => (b.results ?? -1) - (a.results ?? -1)),
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
@@ -341,9 +408,6 @@ Deno.serve(async (req: Request) => {
       // La clave de Constructor.io, su motor de búsqueda: si está en el HTML,
       // se puede consultar su API JSON en vez de bajar páginas enteras.
       const home = await fetchHtml(target)
-      const keys = [...new Set(
-        [...home.html.matchAll(/key_[A-Za-z0-9_-]{8,}/g)].map(m => m[0])
-      )].slice(0, 5)
       const cnstrcUrls = [...new Set(
         [...home.html.matchAll(/[a-z0-9.-]*cnstrc\.com[^"'\s\\]{0,120}/gi)].map(m => m[0])
       )].slice(0, 5)
@@ -351,74 +415,13 @@ Deno.serve(async (req: Request) => {
       return new Response(JSON.stringify({
         target,
         strategies: results.sort((a, b) => (a.kbPerProduct ?? 1e9) - (b.kbPerProduct ?? 1e9)),
-        constructorKeys: keys,
         constructorUrls: cnstrcUrls,
+        constructor: await probeConstructor(),
       }, null, 2), { headers: JSON_HEADERS })
     }
 
-    // --- Constructor.io: buscar su clave y probar su API ---
-    //
-    // Su motor de búsqueda devuelve JSON compacto en vez de páginas de ~900 KB.
-    // La clave no está en el HTML de jumbo.cl sino dentro del bundle que sirven
-    // desde cnstrc.com, así que hay que bajarlo y leerlo.
     if (url.searchParams.get('cnstrc') === '1') {
-      const bundles = [
-        'https://cnstrc.com/js/cust/cencosud_0BmS-e.js',
-        'https://ac.cnstrc.com/js/cust/cencosud_0BmS-e.js',
-      ]
-
-      const candidates = new Set<string>()
-      const bundleInfo = []
-      for (const b of bundles) {
-        try {
-          const res = await fetch(b, { headers: UPSTREAM_HEADERS })
-          const js = await res.text()
-          bundleInfo.push({ url: b, status: res.status, kb: Math.round(js.length / 1024) })
-          if (!res.ok) continue
-          for (const m of js.matchAll(/key_[A-Za-z0-9_-]{6,}/g)) candidates.add(m[0])
-          for (const m of js.matchAll(/["'](?:apiKey|api_key|indexKey|key)["']\s*:\s*["']([A-Za-z0-9_-]{8,})["']/g)) {
-            candidates.add(m[1])
-          }
-        } catch (err) {
-          bundleInfo.push({ url: b, error: String(err) })
-        }
-      }
-
-      // Cada clave candidata se prueba contra su API de búsqueda.
-      const tests = []
-      for (const key of [...candidates].slice(0, 8)) {
-        const api = `https://ac.cnstrc.com/search/leche?key=${encodeURIComponent(key)}`
-          + '&i=00000000-0000-4000-8000-000000000000&s=1&c=ciojs-client-2.35.0'
-          + '&num_results_per_page=100&page=1'
-        try {
-          const res = await fetch(api, { headers: { Accept: 'application/json', Referer: `${ORIGIN}/` } })
-          const body = await res.text()
-          let results = null
-          let total = null
-          try {
-            const json = JSON.parse(body)
-            results = json?.response?.results?.length ?? null
-            total = json?.response?.total_num_results ?? null
-          } catch { /* no era JSON */ }
-          tests.push({
-            key,
-            status: res.status,
-            kb: Math.round(body.length / 1024),
-            results,
-            total,
-            kbPerProduct: results ? Math.round((body.length / 1024 / results) * 100) / 100 : null,
-            preview: results ? undefined : body.slice(0, 200),
-          })
-        } catch (err) {
-          tests.push({ key, error: String(err) })
-        }
-      }
-
-      return new Response(JSON.stringify({
-        bundles: bundleInfo,
-        candidateKeys: [...candidates].slice(0, 20),
-        tests: tests.sort((a, b) => (b.results ?? -1) - (a.results ?? -1)),
-      }, null, 2), { headers: JSON_HEADERS })
+      return new Response(JSON.stringify(await probeConstructor(), null, 2), { headers: JSON_HEADERS })
     }
 
     // --- Proxy crudo ---
