@@ -143,10 +143,15 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
   return { totalSaved, failed, categories: categories.length }
 }
 
+/** Cantidad de productos indexados, o null si la tabla no es legible. */
 export async function countCatalog() {
   if (!isConfigured) return null
   const { count, error } = await supabase
     .from('products')
     .select('id', { count: 'exact', head: true })
-  return error ? null : count
+  if (error) {
+    console.warn('No se pudo contar el catálogo:', error.message)
+    return null
+  }
+  return count
 }

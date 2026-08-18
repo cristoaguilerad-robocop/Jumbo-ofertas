@@ -74,6 +74,14 @@ export default function SyncCatalog() {
           </p>
         </div>
 
+        {isConfigured && catalogCount === null && (
+          <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4 text-sm text-orange-400">
+            No se pudo leer la tabla <span className="font-mono">products</span>. Revisa que hayas
+            ejecutado <span className="font-mono">supabase/products.sql</span> en el SQL Editor de
+            Supabase.
+          </div>
+        )}
+
         {!running && (
           <div className="bg-gray-800 rounded-2xl p-4 space-y-3">
             <p className="text-gray-300 text-sm">
