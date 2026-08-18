@@ -21,6 +21,27 @@
 //   HTML completo        1754 KB   43 KB/producto
 //   cabecera RSC: 1       907 KB   22 KB/producto  <- se usa esta
 //   resultsPerPage/count/pageSize: los ignora, siempre 41 productos
+//
+// Por qué NO se usa Constructor.io, aunque es 12x más liviano:
+//   Su motor sirve la búsqueda de Jumbo y responde 100 productos por llamada
+//   a 3,4 KB c/u. Su bundle expone 13 claves, de distintas cadenas de
+//   Cencosud. Identificadas por el dominio de sus resultados:
+//     key_JopvNXKS61kwGkBe  jumbo.cl producción  (CDN y sellers sin "qa")
+//     key_DFB3C0u9Wbjq8StU  jumbo.cl QA          (jumboclqa.vteximg.com.br)
+//     key_9NpwWxusNvJ2Cyhk  jumbo.cl QA
+//     key_tUrIQxBOU2aGAGad  autocompletado, sin precios
+//     key_j7ajk8vvD4T7oNEM  preview.paris.cl     (¡el de mayor total!)
+//     otras: sisa.cl, jumbocolombia.com, wong.pe, metro.pe, easy.cl, QA de easy
+//
+//   La clave buena devuelve los cuatro campos de precio idénticos:
+//     price = listPrice = sellingPrice = originalPrice = 1320
+//   Sin diferencia entre precio normal y actual no hay forma de detectar
+//   ofertas, que es la función central de la app. Además ese 1320 no es el
+//   1250 que muestra el sitio: SellerVSS lista 39 locales y Jumbo cobra
+//   distinto en cada uno, así que el índice responde por otro local.
+//
+//   El payload RSC sí trae price y listPrice separados. Por eso se prefiere,
+//   aunque pese más.
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
