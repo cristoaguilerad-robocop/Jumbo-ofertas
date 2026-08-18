@@ -60,6 +60,38 @@ export async function getCatalogByBarcode(barcode) {
   return fromRow(data[0])
 }
 
+/**
+ * Asocia un código de barras a un producto.
+ *
+ * Hace falta porque el payload RSC de Jumbo no trae el EAN: sin esto, ningún
+ * escaneo encontraría nada. La primera vez que escaneas un producto lo eliges a
+ * mano y queda vinculado; los escaneos siguientes lo resuelven solos.
+ */
+export async function linkBarcode(product, barcode) {
+  if (!isConfigured) throw new Error('Supabase no está configurado')
+
+  const row = {
+    id: product.id,
+    name: product.name,
+    brand: product.brand || null,
+    barcode,
+    category: product.category || null,
+    category_top: product.categoryTop || product.category || null,
+    category_path: product.categoryPath || null,
+    image_url: product.imageUrl || null,
+    current_price: product.currentPrice,
+    regular_price: product.regularPrice,
+    is_on_sale: !!product.isOnSale,
+    discount_percent: product.discountPercent || 0,
+    is_available: product.isAvailable !== false,
+    updated_at: new Date().toISOString(),
+  }
+
+  const { error } = await supabase.from('products').upsert(row, { onConflict: 'id' })
+  if (error) throw new Error(error.message)
+  return { ...product, barcode }
+}
+
 export async function getCatalogCategories() {
   if (!isConfigured) return null
   const { data, error } = await supabase.rpc('distinct_categories')

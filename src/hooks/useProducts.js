@@ -156,12 +156,17 @@ export function useCategories(fallback) {
 }
 
 export async function searchByBarcode(barcode) {
+  // 1. Códigos ya vinculados: es la vía confiable.
   const indexed = await getCatalogByBarcode(barcode).catch(() => null)
   if (indexed) return indexed
 
+  // 2. El buscador de Jumbo a veces indexa el código. Solo se acepta si
+  //    devuelve un único resultado: con varios se trata de una coincidencia
+  //    difusa sobre los dígitos, y devolver un producto equivocado en un
+  //    escaneo es peor que no encontrar nada.
   try {
     const live = await fetchByBarcode(barcode)
-    if (live.length > 0) return live[0]
+    if (live.length === 1) return live[0]
   } catch { /* cae al mock */ }
 
   return getProductByBarcode(barcode) || null

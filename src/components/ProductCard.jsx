@@ -16,7 +16,7 @@ const CATEGORY_EMOJIS = {
   'Higiene': '🧴',
 }
 
-export default function ProductCard({ product, showAddButton = true }) {
+export default function ProductCard({ product, showAddButton = true, onSelect }) {
   const navigate = useNavigate()
   const { addToList, removeFromList, isInList } = useApp()
   const inList = isInList(product.id)
@@ -33,7 +33,9 @@ export default function ProductCard({ product, showAddButton = true }) {
   return (
     <div
       className="bg-gray-800 rounded-2xl p-4 flex items-center gap-3 cursor-pointer hover:bg-gray-750 active:scale-[0.98] transition-all"
-      onClick={() => navigate(`/product/${product.id}`, { state: { product } })}
+      onClick={() => onSelect
+        ? onSelect(product)
+        : navigate(`/product/${product.id}`, { state: { product } })}
     >
       {/* Icon / Image */}
       {product.imageUrl ? (

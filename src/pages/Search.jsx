@@ -5,6 +5,7 @@ import { useProducts, useCategories, searchByBarcode } from '../hooks/useProduct
 import ProductCard from '../components/ProductCard'
 import BarcodeScanner from '../components/BarcodeScanner'
 import EmptyState from '../components/EmptyState'
+import { linkBarcode } from '../lib/catalogDb'
 
 export default function Search() {
   const [searchParams] = useSearchParams()
@@ -13,6 +14,10 @@ export default function Search() {
   const [showScanner, setShowScanner] = useState(false)
   const [scanError, setScanError] = useState(null)
   const [scanLoading, setScanLoading] = useState(false)
+  // Código escaneado que no se pudo resolver: queda a la espera de que el
+  // usuario elija a qué producto corresponde.
+  const [pendingBarcode, setPendingBarcode] = useState(null)
+  const [linkError, setLinkError] = useState(null)
 
   const {
     query, setQuery, category, setCategory, onlyOffers, setOnlyOffers,
@@ -32,13 +37,27 @@ export default function Search() {
   async function handleBarcodeDetected(barcode) {
     setShowScanner(false)
     setScanError(null)
+    setLinkError(null)
     setScanLoading(true)
     const product = await searchByBarcode(barcode)
     setScanLoading(false)
     if (product) {
       navigate(`/product/${product.id}`, { state: { product } })
-    } else {
-      setScanError(`Código ${barcode} no encontrado en Jumbo ni en el catálogo.`)
+      return
+    }
+    // Jumbo no publica el EAN, así que un código desconocido se resuelve
+    // pidiéndole al usuario que lo vincule una vez.
+    setPendingBarcode(barcode)
+    setQuery('')
+  }
+
+  async function handleLinkProduct(product) {
+    try {
+      const linked = await linkBarcode(product, pendingBarcode)
+      setPendingBarcode(null)
+      navigate(`/product/${product.id}`, { state: { product: linked } })
+    } catch (err) {
+      setLinkError(`No se pudo guardar el código: ${err.message}`)
     }
   }
 
@@ -131,6 +150,30 @@ export default function Search() {
           </div>
         )}
 
+        {pendingBarcode && (
+          <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 space-y-2">
+            <p className="text-sm text-green-400">
+              Código <span className="font-mono">{pendingBarcode}</span> sin registrar.
+            </p>
+            <p className="text-xs text-gray-400">
+              Busca el producto por su nombre y tócalo para vincularlo. La próxima vez que lo
+              escanees se reconocerá solo.
+            </p>
+            <button
+              onClick={() => { setPendingBarcode(null); setLinkError(null) }}
+              className="text-xs text-gray-400 underline"
+            >
+              Cancelar vinculación
+            </button>
+          </div>
+        )}
+
+        {linkError && (
+          <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 text-sm text-orange-400">
+            {linkError}
+          </div>
+        )}
+
         {scanLoading && (
           <div className="flex items-center justify-center py-10 gap-3">
             <div className="w-6 h-6 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
@@ -161,7 +204,11 @@ export default function Search() {
                 : ' en catálogo local'}
             </p>
             {results.map(product => (
-              <ProductCard key={product.id} product={product} />
+              <ProductCard
+                key={product.id}
+                product={product}
+                onSelect={pendingBarcode ? handleLinkProduct : undefined}
+              />
             ))}
 
             {hasMore && (
