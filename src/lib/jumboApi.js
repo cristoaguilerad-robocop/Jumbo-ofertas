@@ -1,10 +1,17 @@
 // Cliente de la API pública VTEX de jumbo.cl.
 //
-// Importante: Jumbo bloquea con 403 las peticiones que vienen de IPs de
-// datacenter, así que todo esto tiene que ejecutarse en el navegador del
-// usuario. Un Edge Function o un runner de CI reciben 403.
+// La API no manda cabeceras CORS, así que el navegador no puede llamarla
+// directamente desde otro dominio: falla con "Failed to fetch" antes de salir.
+// Por eso las peticiones se enrutan por un Edge Function que actúa de proxy
+// (CORS es una restricción del navegador, no del servidor).
+//
+// Se intenta primero directo, por si se sirve desde el mismo origen o Jumbo
+// habilita CORS más adelante, y se cae al proxy si eso falla.
 
-const BASE = 'https://www.jumbo.cl/api/catalog_system/pub'
+import { supabase, isConfigured } from '../supabase'
+
+const PATH_PREFIX = '/api/catalog_system/pub'
+const BASE = `https://www.jumbo.cl${PATH_PREFIX}`
 
 // VTEX no permite paginar más allá del resultado 2500 en una misma consulta.
 export const MAX_WINDOW = 2500
@@ -49,15 +56,58 @@ export function normalizeProduct(p) {
   }
 }
 
-async function getJson(url, signal) {
-  const res = await fetch(url, { headers: { Accept: 'application/json' }, signal })
+const PROXY_URL = isConfigured
+  ? `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/search-products`
+  : null
+
+let proxyOnly = false // una vez que el directo falla por CORS, no se reintenta
+
+async function proxyHeaders() {
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY
+  const { data } = await supabase.auth.getSession()
+  return {
+    Authorization: `Bearer ${data?.session?.access_token || key}`,
+    apikey: key,
+    Accept: 'application/json',
+  }
+}
+
+async function viaProxy(path, signal) {
+  if (!PROXY_URL) throw new Error('Sin proxy configurado (falta Supabase)')
+  const url = `${PROXY_URL}?path=${encodeURIComponent(path)}`
+  const res = await fetch(url, { headers: await proxyHeaders(), signal })
   if (!res.ok) throw new Error(`Jumbo respondió ${res.status}`)
   return res.json()
 }
 
+/**
+ * `path` va relativo a /api/catalog_system/pub, p.ej. "/products/search?_query=leche".
+ */
+async function getJson(path, signal) {
+  if (!proxyOnly) {
+    try {
+      const res = await fetch(BASE + path, { headers: { Accept: 'application/json' }, signal })
+      if (res.ok) return await res.json()
+    } catch (err) {
+      // TypeError = bloqueo de CORS o red caída, no un status HTTP.
+      if (err.name === 'AbortError') throw err
+      proxyOnly = true
+    }
+  }
+  return viaProxy(PATH_PREFIX + path, signal)
+}
+
+/** Diagnóstico: qué responde Jumbo desde el servidor del proxy. */
+export async function diagnose() {
+  if (!PROXY_URL) throw new Error('Sin proxy configurado (falta Supabase)')
+  const res = await fetch(`${PROXY_URL}?diagnose=1`, { headers: await proxyHeaders() })
+  const text = await res.text()
+  try { return JSON.parse(text) } catch { return { raw: text, status: res.status } }
+}
+
 /** Árbol de categorías hasta `depth` niveles. */
 export async function fetchCategoryTree(depth = 3, signal) {
-  return getJson(`${BASE}/category/tree/${depth}`, signal)
+  return getJson(`/category/tree/${depth}`, signal)
 }
 
 /** Aplana el árbol a la lista de categorías hoja (las que tienen productos). */
@@ -76,21 +126,21 @@ export function flattenLeafCategories(tree, trail = []) {
 
 /** Una página de productos de una categoría. */
 export async function fetchCategoryPage(categoryId, from, to, signal) {
-  const url = `${BASE}/products/search?fq=C:/${categoryId}/&_from=${from}&_to=${to}`
+  const url = `/products/search?fq=C:/${categoryId}/&_from=${from}&_to=${to}`
   const raw = await getJson(url, signal)
   return Array.isArray(raw) ? raw.map(normalizeProduct).filter(Boolean) : []
 }
 
 /** Búsqueda por texto libre. */
 export async function fetchSearch(query, from, to, signal) {
-  const url = `${BASE}/products/search?_query=${encodeURIComponent(query)}&_from=${from}&_to=${to}`
+  const url = `/products/search?_query=${encodeURIComponent(query)}&_from=${from}&_to=${to}`
   const raw = await getJson(url, signal)
   return Array.isArray(raw) ? raw.map(normalizeProduct).filter(Boolean) : []
 }
 
 /** Búsqueda por código de barras (EAN). */
 export async function fetchByBarcode(barcode, signal) {
-  const url = `${BASE}/products/search?fq=alternateId:${encodeURIComponent(barcode)}`
+  const url = `/products/search?fq=alternateId:${encodeURIComponent(barcode)}`
   const raw = await getJson(url, signal)
   return Array.isArray(raw) ? raw.map(normalizeProduct).filter(Boolean) : []
 }
@@ -102,7 +152,7 @@ export async function fetchPricesByIds(productIds, signal) {
   const fq = productIds
     .map(id => `fq=productId:${encodeURIComponent(String(id).replace(/^jumbo_/, ''))}`)
     .join('&')
-  const url = `${BASE}/products/search?${fq}&_from=0&_to=${productIds.length - 1}`
+  const url = `/products/search?${fq}&_from=0&_to=${productIds.length - 1}`
   const raw = await getJson(url, signal)
   return Array.isArray(raw) ? raw.map(normalizeProduct).filter(Boolean) : []
 }

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { isConfigured } from '../supabase'
 import { syncCatalog, loadProgress, clearProgress, countCatalog } from '../lib/catalogSync'
+import { diagnose } from '../lib/jumboApi'
 
 export default function SyncCatalog() {
   const navigate = useNavigate()
@@ -10,7 +11,21 @@ export default function SyncCatalog() {
   const [error, setError] = useState(null)
   const [catalogCount, setCatalogCount] = useState(null)
   const [resumable, setResumable] = useState(false)
+  const [diag, setDiag] = useState(null)
+  const [diagLoading, setDiagLoading] = useState(false)
   const abortRef = useRef(null)
+
+  async function runDiagnose() {
+    setDiagLoading(true)
+    setDiag(null)
+    try {
+      setDiag(await diagnose())
+    } catch (err) {
+      setDiag({ error: String(err) })
+    } finally {
+      setDiagLoading(false)
+    }
+  }
 
   useEffect(() => {
     countCatalog().then(setCatalogCount)
@@ -173,6 +188,28 @@ export default function SyncCatalog() {
             {error}
           </div>
         )}
+
+        {/* Diagnóstico: qué responde Jumbo desde el servidor del proxy */}
+        <div className="bg-gray-800 rounded-2xl p-4 space-y-3">
+          <div>
+            <p className="text-white font-medium text-sm">Diagnóstico de conexión</p>
+            <p className="text-gray-500 text-xs mt-0.5">
+              Prueba las rutas de Jumbo desde el servidor y muestra qué responde cada una.
+            </p>
+          </div>
+          <button
+            onClick={runDiagnose}
+            disabled={diagLoading}
+            className="w-full bg-gray-700 hover:bg-gray-600 text-gray-200 py-2.5 rounded-xl text-sm disabled:opacity-60"
+          >
+            {diagLoading ? 'Probando...' : 'Probar conexión'}
+          </button>
+          {diag && (
+            <pre className="bg-gray-950 text-gray-300 text-[10px] leading-relaxed rounded-xl p-3 overflow-x-auto max-h-72 overflow-y-auto">
+              {JSON.stringify(diag, null, 2)}
+            </pre>
+          )}
+        </div>
       </div>
     </div>
   )
