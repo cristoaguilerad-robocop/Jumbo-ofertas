@@ -1,10 +1,4 @@
 import { supabase, isConfigured } from '../supabase'
-import {
-  fetchCategoryTree,
-  flattenLeafCategories,
-  fetchCategoryPage,
-  MAX_WINDOW,
-} from './jumboApi'
 
 const PAGE_SIZE = 50
 const UPSERT_BATCH = 400
@@ -51,96 +45,16 @@ async function upsertProducts(products) {
   }
 }
 
-/**
- * Recorre el catálogo completo de Jumbo categoría por categoría y lo guarda en
- * Supabase. Reanudable: si se corta, la siguiente corrida retoma donde quedó.
- *
- * @param {object} opts
- * @param {(s: object) => void} opts.onProgress
- * @param {AbortSignal} opts.signal
- * @param {boolean} opts.restart  ignora el progreso guardado y parte de cero
- */
-export async function syncCatalog({ onProgress, signal, restart = false } = {}) {
-  if (!isConfigured) throw new Error('Supabase no está configurado')
-
-  const report = patch => onProgress?.(patch)
-
-  report({ phase: 'categories', message: 'Obteniendo árbol de categorías...' })
-  const tree = await fetchCategoryTree(3, signal)
-  const categories = flattenLeafCategories(tree)
-  if (!categories.length) throw new Error('No se pudieron leer las categorías de Jumbo')
-
-  const saved = restart ? null : loadProgress()
-  const done = new Set(saved?.doneCategories || [])
-  let totalSaved = saved?.totalSaved || 0
-  let failed = saved?.failed || 0
-
-  report({
-    phase: 'crawling',
-    totalCategories: categories.length,
-    doneCategories: done.size,
-    totalSaved,
-    failed,
-  })
-
-  for (const cat of categories) {
-    if (signal?.aborted) throw new DOMException('Sincronización cancelada', 'AbortError')
-    if (done.has(cat.id)) continue
-
-    report({
-      phase: 'crawling',
-      currentCategory: cat.path,
-      totalCategories: categories.length,
-      doneCategories: done.size,
-      totalSaved,
-      failed,
-    })
-
-    try {
-      let from = 0
-      while (from < MAX_WINDOW) {
-        if (signal?.aborted) throw new DOMException('Sincronización cancelada', 'AbortError')
-
-        const to = Math.min(from + PAGE_SIZE - 1, MAX_WINDOW - 1)
-        const products = await fetchCategoryPage(cat.id, from, to, signal)
-        if (!products.length) break
-
-        await upsertProducts(products)
-        totalSaved += products.length
-
-        report({
-          phase: 'crawling',
-          currentCategory: cat.path,
-          totalCategories: categories.length,
-          doneCategories: done.size,
-          totalSaved,
-          failed,
-        })
-
-        if (products.length < PAGE_SIZE) break
-        from += PAGE_SIZE
-        await sleep(THROTTLE_MS)
-      }
-    } catch (err) {
-      if (err.name === 'AbortError') throw err
-      // Una categoría rota no debe abortar el crawl completo.
-      failed += 1
-    }
-
-    done.add(cat.id)
-    saveProgress({ doneCategories: [...done], totalSaved, failed })
-    await sleep(THROTTLE_MS)
-  }
-
-  report({
-    phase: 'done',
-    totalCategories: categories.length,
-    doneCategories: done.size,
-    totalSaved,
-    failed,
-  })
-
-  return { totalSaved, failed, categories: categories.length }
+/** Descarga el catálogo completo a Supabase. Pendiente: ver dentro. */
+export async function syncCatalog() {
+  // El crawl completo se apoyaba en el árbol de categorías de VTEX, que jumbo.cl
+  // no expone (404). Las rutas de categoría reales salen del sitemap; hasta
+  // tenerlas, este paso queda pendiente en vez de fallar a medias.
+  throw new Error(
+    'El crawl del catálogo completo aún no está implementado para la estructura ' +
+    'real de jumbo.cl. Usa "Descubrir API de Jumbo" para obtener las rutas del sitemap. ' +
+    'Mientras tanto, la búsqueda ya trae precios reales en vivo.'
+  )
 }
 
 /** Cantidad de productos indexados, o null si la tabla no es legible. */
