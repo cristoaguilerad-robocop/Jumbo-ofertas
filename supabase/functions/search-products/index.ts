@@ -282,7 +282,7 @@ async function probeConstructor() {
   }
 
   const tests = []
-  for (const key of [...candidates].slice(0, 8)) {
+  for (const key of [...candidates].slice(0, 16)) {
     const api = `https://ac.cnstrc.com/search/leche?key=${encodeURIComponent(key)}`
       + '&i=00000000-0000-4000-8000-000000000000&s=1&c=ciojs-client-2.35.0'
       + '&num_results_per_page=100&page=1'
@@ -291,10 +291,20 @@ async function probeConstructor() {
       const body = await res.text()
       let results = null
       let total = null
+      let samples: unknown[] = []
       try {
         const json = JSON.parse(body)
-        results = json?.response?.results?.length ?? null
+        const list = json?.response?.results ?? []
+        results = list.length
         total = json?.response?.total_num_results ?? null
+        // La muestra identifica de qué cadena es la clave: las 13 son de
+        // distintos banners de Cencosud y solo una corresponde a Jumbo.
+        samples = list.slice(0, 3).map((r: Record<string, any>) => ({
+          name: r?.value,
+          price: r?.data?.price ?? r?.data?.sellingPrice ?? r?.data?.listPrice ?? null,
+          url: r?.data?.url ?? r?.data?.link ?? null,
+          id: r?.data?.id ?? null,
+        }))
       } catch { /* no era JSON */ }
       tests.push({
         key,
@@ -303,6 +313,7 @@ async function probeConstructor() {
         results,
         total,
         kbPerProduct: results ? Math.round((body.length / 1024 / results) * 100) / 100 : null,
+        samples,
         preview: results ? undefined : body.slice(0, 200),
       })
     } catch (err) {
