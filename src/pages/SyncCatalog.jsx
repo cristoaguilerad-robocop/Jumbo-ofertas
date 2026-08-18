@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { isConfigured } from '../supabase'
 import { syncCatalog, loadProgress, clearProgress, countCatalog } from '../lib/catalogSync'
-import { diagnose } from '../lib/jumboApi'
+import { discoverApi } from '../lib/jumboApi'
 
 export default function SyncCatalog() {
   const navigate = useNavigate()
@@ -19,7 +19,7 @@ export default function SyncCatalog() {
     setDiagLoading(true)
     setDiag(null)
     try {
-      setDiag(await diagnose())
+      setDiag(await discoverApi())
     } catch (err) {
       setDiag({ error: String(err) })
     } finally {
@@ -105,8 +105,8 @@ export default function SyncCatalog() {
               donde quedó.
             </p>
             <p className="text-gray-500 text-xs">
-              Se ejecuta desde tu navegador porque Jumbo bloquea las peticiones que vienen de
-              servidores.
+              Las peticiones pasan por un proxy propio, porque la API de Jumbo no permite que la
+              llamen desde otro dominio.
             </p>
             <div className="flex gap-2">
               <button
@@ -192,9 +192,9 @@ export default function SyncCatalog() {
         {/* Diagnóstico: qué responde Jumbo desde el servidor del proxy */}
         <div className="bg-gray-800 rounded-2xl p-4 space-y-3">
           <div>
-            <p className="text-white font-medium text-sm">Diagnóstico de conexión</p>
+            <p className="text-white font-medium text-sm">Descubrir API de Jumbo</p>
             <p className="text-gray-500 text-xs mt-0.5">
-              Prueba las rutas de Jumbo desde el servidor y muestra qué responde cada una.
+              Descubre qué API usa jumbo.cl probando rutas y leyendo el HTML del sitio.
             </p>
           </div>
           <button
@@ -202,7 +202,7 @@ export default function SyncCatalog() {
             disabled={diagLoading}
             className="w-full bg-gray-700 hover:bg-gray-600 text-gray-200 py-2.5 rounded-xl text-sm disabled:opacity-60"
           >
-            {diagLoading ? 'Probando...' : 'Probar conexión'}
+            {diagLoading ? 'Buscando API...' : 'Descubrir API de Jumbo'}
           </button>
           {diag && (
             <pre className="bg-gray-950 text-gray-300 text-[10px] leading-relaxed rounded-xl p-3 overflow-x-auto max-h-72 overflow-y-auto">

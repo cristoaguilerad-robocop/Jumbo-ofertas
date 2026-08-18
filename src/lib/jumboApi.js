@@ -97,12 +97,16 @@ async function getJson(path, signal) {
   return viaProxy(PATH_PREFIX + path, signal)
 }
 
-/** Diagnóstico: qué responde Jumbo desde el servidor del proxy. */
-export async function diagnose() {
+/**
+ * Descubre qué API usa jumbo.cl: prueba rutas candidatas y extrae pistas del
+ * HTML del propio sitio. jumbo.cl no expone la API legacy de VTEX, así que el
+ * endpoint real hay que encontrarlo empíricamente.
+ */
+export async function discoverApi() {
   if (!PROXY_URL) throw new Error('Sin proxy configurado (falta Supabase)')
-  const res = await fetch(`${PROXY_URL}?diagnose=1`, { headers: await proxyHeaders() })
+  const res = await fetch(`${PROXY_URL}?discover=1`, { headers: await proxyHeaders() })
   const text = await res.text()
-  try { return JSON.parse(text) } catch { return { raw: text, status: res.status } }
+  try { return JSON.parse(text) } catch { return { raw: text.slice(0, 2000), status: res.status } }
 }
 
 /** Árbol de categorías hasta `depth` niveles. */
