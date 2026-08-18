@@ -8,8 +8,8 @@ const PAGE_SIZE = 24
 /**
  * Tres fuentes en orden de preferencia:
  *   1. catálogo indexado en Supabase — instantáneo y completo (requiere sync)
- *   2. API de Jumbo en vivo — siempre fresca, pero limitada por consulta
- *   3. catálogo mock local — último recurso sin conexión
+ *   2. jumbo.cl en vivo — se parsea su página de búsqueda vía proxy
+ *   3. catálogo mock local — último recurso
  */
 export function useProducts() {
   const [query, setQuery] = useState('')
@@ -23,10 +23,10 @@ export function useProducts() {
   const [hasMore, setHasMore] = useState(false)
   const [error, setError] = useState(null)
 
-  // Descarta respuestas de búsquedas que ya quedaron obsoletas, para que una
-  // petición lenta no pise el resultado que ya está en pantalla.
+  // Descarta respuestas de búsquedas obsoletas, para que una petición lenta no
+  // pise el resultado que ya está en pantalla.
   const tokenRef = useRef(0)
-  const offsetRef = useRef(0)
+  const pageRef = useRef(1)
 
   const trimmed = query.trim()
   const hasFilter = trimmed.length >= 2 || category !== 'Todos' || onlyOffers
@@ -56,7 +56,7 @@ export function useProducts() {
         })
         if (token !== tokenRef.current) return
         if (items?.length) {
-          offsetRef.current = items.length
+          pageRef.current = 1
           setRemoteResults(items)
           setSource('catalog')
           setHasMore(items.length >= PAGE_SIZE)
@@ -65,13 +65,13 @@ export function useProducts() {
         }
       } catch { /* sigue al vivo */ }
 
-      // 2. Jumbo en vivo
+      // 2. jumbo.cl en vivo
       if (trimmed.length >= 2) {
         try {
-          const items = await fetchSearch(trimmed, 0, PAGE_SIZE - 1, controller.signal)
+          const items = await fetchSearch(trimmed, 1, controller.signal)
           if (token !== tokenRef.current) return
           if (items.length) {
-            offsetRef.current = items.length
+            pageRef.current = 1
             setRemoteResults(onlyOffers ? items.filter(p => p.isOnSale) : items)
             setSource('jumbo')
             setHasMore(items.length >= PAGE_SIZE)
@@ -83,7 +83,6 @@ export function useProducts() {
         }
       }
 
-      // 3. Sin resultados remotos: cae al mock
       if (token !== tokenRef.current) return
       setRemoteResults(null)
       setSource(null)
@@ -100,17 +99,18 @@ export function useProducts() {
   const loadMore = useCallback(async () => {
     if (!hasMore || loadingMore) return
     const token = tokenRef.current
+    const nextPage = pageRef.current + 1
     setLoadingMore(true)
     try {
       const items = source === 'catalog'
         ? await searchCatalog({
             query: trimmed, category, onlyOffers,
-            from: offsetRef.current, limit: PAGE_SIZE,
+            from: (nextPage - 1) * PAGE_SIZE, limit: PAGE_SIZE,
           })
-        : await fetchSearch(trimmed, offsetRef.current, offsetRef.current + PAGE_SIZE - 1)
+        : await fetchSearch(trimmed, nextPage)
 
       if (token !== tokenRef.current || !items) return
-      offsetRef.current += items.length
+      pageRef.current = nextPage
       setRemoteResults(prev => {
         const seen = new Set((prev || []).map(p => p.id))
         return [...(prev || []), ...items.filter(p => !seen.has(p.id))]

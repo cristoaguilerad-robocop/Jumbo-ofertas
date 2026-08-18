@@ -1,7 +1,6 @@
 import { useCallback } from 'react'
 import { mockProducts } from '../data/mockProducts'
 import { getPricesForIds } from '../lib/catalogDb'
-import { fetchPricesByIds } from '../lib/jumboApi'
 
 function formatCLP(n) {
   return `$${n.toLocaleString('es-CL')}`
@@ -15,15 +14,9 @@ async function resolveCurrentPrices(items) {
   const ids = items.map(i => i.productId)
   const prices = await getPricesForIds(ids).catch(() => ({}))
 
-  const missing = ids.filter(id => !prices[id] && id.startsWith('jumbo_'))
-  if (missing.length) {
-    try {
-      const live = await fetchPricesByIds(missing)
-      for (const p of live) {
-        prices[p.id] = { currentPrice: p.currentPrice, isOnSale: p.isOnSale }
-      }
-    } catch { /* se ignoran los que no se pudieron refrescar */ }
-  }
+  // Los productos de Jumbo que no estén en el catálogo indexado se quedan sin
+  // precio fresco: refrescarlos exige abrir la página de cada uno, lo que aún
+  // no está implementado.
 
   // Los productos mock no viven en Supabase ni en Jumbo.
   for (const id of ids) {
