@@ -2,11 +2,12 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { isConfigured } from '../supabase'
 import { syncCatalog, loadProgress, clearProgress, countCatalog } from '../lib/catalogSync'
-import { discoverApi } from '../lib/jumboApi'
+import { runBenchmark } from '../lib/jumboApi'
 import { EXCLUDED_SECTIONS } from '../lib/catalogFilters'
 
 const SECTION_LABELS = {
-  ropa: 'Ropa', mascotas: 'Mascotas', hogar: 'Hogar', jugueteria: 'Juguetería',
+  ropa: 'Ropa', mascotas: 'Mascotas', hogar: 'Hogar',
+  jugueteria: 'Juguetería', farmacia: 'Farmacia', libreria: 'Librería',
 }
 
 export default function SyncCatalog() {
@@ -24,7 +25,7 @@ export default function SyncCatalog() {
     setDiagLoading(true)
     setDiag(null)
     try {
-      setDiag(await discoverApi())
+      setDiag(await runBenchmark())
     } catch (err) {
       setDiag({ error: String(err) })
     } finally {
@@ -105,9 +106,9 @@ export default function SyncCatalog() {
         {!running && (
           <div className="bg-gray-800 rounded-2xl p-4 space-y-3">
             <p className="text-gray-300 text-sm">
-              La descarga toma <span className="text-white font-medium">entre 15 y 25 minutos</span>.
-              Deja esta pestaña abierta y con la pantalla encendida. Si se corta, puedes retomar
-              donde quedó.
+              La descarga se detiene sola a los <span className="text-white font-medium">10 minutos</span>.
+              Deja esta pestaña abierta y con la pantalla encendida. Si queda a medias, «Retomar»
+              sigue donde quedó.
             </p>
             <p className="text-gray-500 text-xs">
               Las peticiones pasan por un proxy propio, porque la API de Jumbo no permite que la
@@ -247,9 +248,9 @@ export default function SyncCatalog() {
         {/* Diagnóstico: qué responde Jumbo desde el servidor del proxy */}
         <div className="bg-gray-800 rounded-2xl p-4 space-y-3">
           <div>
-            <p className="text-white font-medium text-sm">Descubrir API de Jumbo</p>
+            <p className="text-white font-medium text-sm">Medir velocidad de descarga</p>
             <p className="text-gray-500 text-xs mt-0.5">
-              Descubre qué API usa jumbo.cl probando rutas y leyendo el HTML del sitio.
+              Compara estrategias de descarga y reporta KB por producto de cada una.
             </p>
           </div>
           <button
@@ -257,7 +258,7 @@ export default function SyncCatalog() {
             disabled={diagLoading}
             className="w-full bg-gray-700 hover:bg-gray-600 text-gray-200 py-2.5 rounded-xl text-sm disabled:opacity-60"
           >
-            {diagLoading ? 'Buscando API...' : 'Descubrir API de Jumbo'}
+            {diagLoading ? 'Midiendo...' : 'Medir estrategias'}
           </button>
           {diag && (
             <pre className="bg-gray-950 text-gray-300 text-[10px] leading-relaxed rounded-xl p-3 overflow-x-auto max-h-72 overflow-y-auto">

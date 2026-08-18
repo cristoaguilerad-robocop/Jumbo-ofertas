@@ -11,8 +11,10 @@
 //
 // Modos:
 //   ?search=leche&page=1   productos de la búsqueda, ya normalizados
+//   ?category=lacteos      productos de una categoría
+//   ?categories=1          rutas de categoría, del sitemap y del menú
+//   ?benchmark=1           compara estrategias de descarga (KB por producto)
 //   ?path=/...             proxy crudo de una ruta de jumbo.cl
-//   ?discover=2            sitemap y pistas del backend, para armar el crawl
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -258,23 +260,63 @@ Deno.serve(async (req: Request) => {
       return new Response(JSON.stringify(await discoverCategories()), { headers: JSON_HEADERS })
     }
 
-    // --- Pistas para armar el crawl completo ---
-    if (url.searchParams.get('discover') === '2') {
-      const sitemap = await fetchHtml('/sitemap.xml')
-      const page2 = await fetchHtml('/busqueda?ft=leche&page=2')
-      const p1 = await fetchHtml('/busqueda?ft=leche')
+    // --- Banco de pruebas: qué estrategia baja el catálogo más rápido ---
+    //
+    // Una página HTML pesa ~1,7 MB para ~24 productos. Antes de optimizar a
+    // ciegas conviene medir cuánto pesa y cuántos productos rinde cada vía.
+    if (url.searchParams.get('benchmark') === '1') {
+      const target = url.searchParams.get('target') || '/busqueda?ft=leche'
+      const sep = target.includes('?') ? '&' : '?'
 
-      const hostHints: string[] = []
-      for (const m of p1.html.matchAll(/[a-zA-Z0-9._-]*(?:bff|cnstrc|constructor|api)[a-zA-Z0-9._-]*\.[a-z]{2,}[^"'\s\\]{0,80}/gi)) {
-        if (hostHints.length < 25 && !hostHints.includes(m[0])) hostHints.push(m[0].slice(0, 160))
+      const strategies: Array<{ name: string; path: string; headers?: Record<string, string> }> = [
+        { name: 'html', path: target },
+        { name: 'rsc-header', path: target, headers: { RSC: '1' } },
+        { name: 'rsc-param', path: `${target}${sep}_rsc=1` },
+        { name: 'resultsPerPage=100', path: `${target}${sep}resultsPerPage=100` },
+        { name: 'count=100', path: `${target}${sep}count=100` },
+        { name: 'pageSize=100', path: `${target}${sep}pageSize=100` },
+      ]
+
+      const results = []
+      for (const s of strategies) {
+        const started = Date.now()
+        try {
+          const res = await fetch(ORIGIN + s.path, {
+            headers: { ...UPSTREAM_HEADERS, ...(s.headers || {}) },
+            redirect: 'follow',
+          })
+          const body = await res.text()
+          const products = extractProducts(body)
+          const ms = Date.now() - started
+          results.push({
+            name: s.name,
+            status: res.status,
+            ms,
+            kb: Math.round(body.length / 1024),
+            products: products.length,
+            kbPerProduct: products.length ? Math.round(body.length / 1024 / products.length) : null,
+            contentType: res.headers.get('content-type'),
+          })
+        } catch (err) {
+          results.push({ name: s.name, status: 0, error: String(err) })
+        }
       }
 
+      // La clave de Constructor.io, su motor de búsqueda: si está en el HTML,
+      // se puede consultar su API JSON en vez de bajar páginas enteras.
+      const home = await fetchHtml(target)
+      const keys = [...new Set(
+        [...home.html.matchAll(/key_[A-Za-z0-9_-]{8,}/g)].map(m => m[0])
+      )].slice(0, 5)
+      const cnstrcUrls = [...new Set(
+        [...home.html.matchAll(/[a-z0-9.-]*cnstrc\.com[^"'\s\\]{0,120}/gi)].map(m => m[0])
+      )].slice(0, 5)
+
       return new Response(JSON.stringify({
-        sitemap: { status: sitemap.status, bytes: sitemap.html.length, head: sitemap.html.slice(0, 1500) },
-        page1Count: extractProducts(p1.html).length,
-        page2Count: extractProducts(page2.html).length,
-        sampleProduct: extractProducts(p1.html)[0] || null,
-        hostHints,
+        target,
+        strategies: results.sort((a, b) => (a.kbPerProduct ?? 1e9) - (b.kbPerProduct ?? 1e9)),
+        constructorKeys: keys,
+        constructorUrls: cnstrcUrls,
       }, null, 2), { headers: JSON_HEADERS })
     }
 

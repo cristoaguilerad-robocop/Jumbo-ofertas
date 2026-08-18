@@ -62,7 +62,10 @@ export async function fetchCategories() {
   return { categories: json.categories || [], stats: json.stats || {} }
 }
 
-/** Pistas del sitemap y del backend, para diagnóstico. */
-export async function discoverApi() {
-  return callProxy({ discover: '2' })
+/**
+ * Mide qué estrategia baja el catálogo más rápido: HTML plano, payload RSC, o
+ * páginas más grandes. Reporta KB por producto, que es la métrica que manda.
+ */
+export async function runBenchmark(target) {
+  return callProxy(target ? { benchmark: '1', target } : { benchmark: '1' })
 }

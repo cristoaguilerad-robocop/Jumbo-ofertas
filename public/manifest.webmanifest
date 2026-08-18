@@ -1,0 +1,16 @@
+{
+  "name": "Jumbo Ofertas",
+  "short_name": "Jumbo Ofertas",
+  "description": "Lista de compras con precios reales de Jumbo, ofertas y alertas de bajada de precio.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#030712",
+  "theme_color": "#00A650",
+  "lang": "es-CL",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
