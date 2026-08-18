@@ -5,6 +5,7 @@ import Home from './pages/Home'
 import Search from './pages/Search'
 import ShoppingList from './pages/ShoppingList'
 import ProductDetail from './pages/ProductDetail'
+import SyncCatalog from './pages/SyncCatalog'
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
           <Route path="/search" element={<Search />} />
           <Route path="/list" element={<ShoppingList />} />
           <Route path="/product/:id" element={<ProductDetail />} />
+          <Route path="/sync" element={<SyncCatalog />} />
         </Routes>
         <NavBar />
       </div>

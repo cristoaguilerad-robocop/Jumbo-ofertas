@@ -1,16 +1,25 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getOnSaleProducts } from '../data/mockProducts'
 import { useApp } from '../context/AppContext'
 import { useNotifications } from '../hooks/useNotifications'
+import { getOffers } from '../lib/catalogDb'
+import { countCatalog } from '../lib/catalogSync'
 import ProductCard from '../components/ProductCard'
 
-const offerProducts = getOnSaleProducts().slice(0, 6)
+const mockOffers = getOnSaleProducts().slice(0, 6)
 
 export default function Home() {
   const navigate = useNavigate()
   const { shoppingList } = useApp()
   const { requestPermission, checkPriceDrops } = useNotifications()
+  const [offerProducts, setOfferProducts] = useState(mockOffers)
+  const [catalogCount, setCatalogCount] = useState(null)
+
+  useEffect(() => {
+    countCatalog().then(setCatalogCount)
+    getOffers(6).then(offers => { if (offers?.length) setOfferProducts(offers) })
+  }, [])
 
   useEffect(() => {
     const listSize = Object.keys(shoppingList).length
@@ -61,6 +70,24 @@ export default function Home() {
             <p className="text-gray-400 text-xs mt-0.5">Usa la cámara</p>
           </button>
         </div>
+
+        {/* Catalog sync prompt */}
+        {catalogCount !== null && catalogCount === 0 && (
+          <button
+            onClick={() => navigate('/sync')}
+            className="w-full bg-green-500/10 border border-green-500/20 rounded-2xl p-4 flex items-center gap-3 text-left active:scale-[0.98] transition-all"
+          >
+            <div className="w-12 h-12 bg-green-500/10 rounded-xl flex items-center justify-center text-2xl shrink-0">
+              📦
+            </div>
+            <div className="flex-1">
+              <p className="text-white font-medium text-sm">Descargar catálogo completo</p>
+              <p className="text-gray-400 text-xs mt-0.5">
+                Busca entre todos los productos de Jumbo al instante
+              </p>
+            </div>
+          </button>
+        )}
 
         {/* List summary */}
         {listCount > 0 && (

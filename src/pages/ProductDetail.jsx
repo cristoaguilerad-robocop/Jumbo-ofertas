@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { getProductById, formatPrice } from '../data/mockProducts'
 import { useApp } from '../context/AppContext'
+import { getCatalogProduct } from '../lib/catalogDb'
 import OfferBadge from '../components/OfferBadge'
 
 const CATEGORY_EMOJIS = {
@@ -27,8 +28,21 @@ export default function ProductDetail() {
   const location = useLocation()
   const { addToList, removeFromList, isInList, setTargetPrice, shoppingList } = useApp()
 
-  // Accept product from navigation state (live Jumbo result) or fall back to mock
-  const product = location.state?.product || getProductById(id)
+  // Producto desde el estado de navegación (resultado en vivo de Jumbo), del
+  // catálogo indexado si se recargó la página, o del mock como último recurso.
+  const [fetched, setFetched] = useState(null)
+  const [lookingUp, setLookingUp] = useState(false)
+  const product = location.state?.product || fetched || getProductById(id)
+
+  useEffect(() => {
+    if (location.state?.product || getProductById(id)) return
+    setLookingUp(true)
+    getCatalogProduct(id)
+      .then(setFetched)
+      .catch(() => setFetched(null))
+      .finally(() => setLookingUp(false))
+  }, [id]) // eslint-disable-line
+
   const inList = isInList(id)
   const listItem = shoppingList[id]
 
@@ -41,7 +55,11 @@ export default function ProductDetail() {
   if (!product) {
     return (
       <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center gap-4">
-        <p className="text-gray-400">Producto no encontrado.</p>
+        {lookingUp ? (
+          <div className="w-6 h-6 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+        ) : (
+          <p className="text-gray-400">Producto no encontrado.</p>
+        )}
         <button onClick={() => navigate(-1)} className="text-green-400 text-sm">Volver</button>
       </div>
     )
