@@ -48,6 +48,43 @@ function saveProgress(p) {
   try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(p)) } catch { /* ignore */ }
 }
 
+/**
+ * Verifica que se pueda escribir en `products` antes de empezar.
+ *
+ * Sin esto, un fallo de permisos se manifestaba como un crawl de cinco
+ * minutos que terminaba con la tabla vacía: el error se perdía en el catch
+ * por categoría, que solo contaba fallas sin mostrar el motivo.
+ */
+async function preflight() {
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  if (authError || !user) {
+    throw new Error(
+      'No hay sesión activa en Supabase. Revisa que los inicios de sesión ' +
+      'anónimos estén habilitados en Authentication → Sign In / Up.' +
+      (authError ? ` (${authError.message})` : '')
+    )
+  }
+
+  const probeId = `preflight_${Date.now()}`
+  const { error: writeError } = await supabase.from('products').upsert({
+    id: probeId,
+    name: 'Comprobación de escritura',
+    current_price: 1,
+    regular_price: 1,
+  }, { onConflict: 'id' })
+
+  if (writeError) {
+    throw new Error(
+      `No se puede escribir en la tabla products: ${writeError.message}. ` +
+      'Revisa que hayas ejecutado supabase/products.sql completo, incluidas ' +
+      'las políticas de RLS.'
+    )
+  }
+
+  await supabase.from('products').delete().eq('id', probeId)
+  return user
+}
+
 async function upsertProducts(products, categoryPath) {
   const rows = products.map(p => toRow(p, categoryPath))
   for (let i = 0; i < rows.length; i += UPSERT_BATCH) {
@@ -84,6 +121,9 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
 
   const report = patch => onProgress?.(patch)
 
+  report({ phase: 'categories', message: 'Verificando acceso a Supabase...' })
+  await preflight()
+
   report({ phase: 'categories', message: 'Buscando categorías...' })
   const { categories: allCategories, stats } = await fetchCategories()
   if (!allCategories?.length) {
@@ -103,6 +143,7 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
   const done = new Set(saved?.doneCategories || [])
   let totalSaved = saved?.totalSaved || 0
   let failed = saved?.failed || 0
+  let lastError = null
 
   const startedAt = Date.now()
   const alreadyDone = done.size
@@ -125,6 +166,7 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
       doneCategories: done.size,
       totalSaved,
       failed,
+      lastError,
       productsPerMin: elapsedMin > 0.2 ? Math.round(totalSaved / elapsedMin) : null,
       etaMin: perMin > 0 ? Math.round((categories.length - done.size) / perMin) : null,
       ...extra,
@@ -178,6 +220,11 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
       } catch (err) {
         if (err.name === 'AbortError') throw err
         failed += 1
+        lastError = err.message
+        // Si todo falla, no tiene sentido seguir cinco minutos en vano.
+        if (failed >= 5 && totalSaved === 0) {
+          throw new Error(`El crawl no logró guardar nada. Primer error: ${err.message}`)
+        }
       } finally {
         active.delete(categoryPath)
       }
@@ -194,6 +241,7 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
   return {
     totalSaved,
     failed,
+    lastError,
     outOfTime,
     categories: categories.length,
     excluded: excluded.length,

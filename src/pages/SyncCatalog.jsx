@@ -211,9 +211,16 @@ export default function SyncCatalog() {
               </p>
             )}
             {progress?.failed > 0 && (
-              <p className="text-orange-400 text-xs">
-                {progress.failed} {progress.failed === 1 ? 'categoría omitida' : 'categorías omitidas'} por errores
-              </p>
+              <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 space-y-1">
+                <p className="text-orange-400 text-xs font-medium">
+                  {progress.failed} {progress.failed === 1 ? 'categoría falló' : 'categorías fallaron'}
+                </p>
+                {progress.lastError && (
+                  <p className="text-orange-300/80 text-[11px] font-mono break-words">
+                    {progress.lastError}
+                  </p>
+                )}
+              </div>
             )}
 
             <button
