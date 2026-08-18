@@ -5,10 +5,12 @@
 //
 // Modos:
 //   ?path=/...      proxy de una ruta de jumbo.cl
-//   ?discover=1     descubre qué API usa el sitio (rutas candidatas + HTML)
+//   ?discover=1     analiza la página de búsqueda para encontrar el backend real
 //
-// Nota: jumbo.cl NO expone /api/catalog_system/pub/ (devuelve 404). El sitio
-// es una app Next.js, así que el endpoint real hay que descubrirlo.
+// Lo que ya se descartó con evidencia:
+//   - jumbo.cl NO expone /api/catalog_system/pub/ ni /api/io/_v/ (404 en todas)
+//   - No usa __NEXT_DATA__: es Next.js App Router, los datos van en payloads RSC
+//   - La ruta de búsqueda real es /busqueda?ft=<texto>
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -21,45 +23,52 @@ const ORIGIN = 'https://www.jumbo.cl'
 
 const UPSTREAM_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36',
-  'Accept': 'application/json, text/plain, */*',
+  'Accept': 'text/html,application/json,application/xhtml+xml,*/*',
   'Accept-Language': 'es-CL,es;q=0.9',
   'Referer': `${ORIGIN}/`,
 }
 
-// Rutas de API que suelen usar los storefronts de VTEX y las apps Next.js.
-const API_CANDIDATES = [
-  '/api/io/_v/api/intelligent-search/product_search?query=leche&count=3',
-  '/_v/api/intelligent-search/product_search?query=leche&count=3',
-  '/api/io/_v/private/graphql/v1',
-  '/api/catalog_system/pub/products/search?ft=leche',
-  '/api/search?q=leche',
-  '/api/products/search?q=leche',
-  '/api/vtexcommercestable/pub/products/search?ft=leche',
-]
+// Hosts de terceros que solo hacen ruido (analítica, tags, fuentes).
+const NOISE = /google|gtm|facebook|doubleclick|hotjar|newrelic|cookielaw|onetrust|clarity|criteo|adobe|w3\.org|schema\.org|gstatic|cloudflareinsights|linkedin|tiktok|youtube|instagram|twitter|whatsapp/i
 
-// Páginas del sitio: su HTML revela a qué API le pega el propio Jumbo.
-const PAGE_CANDIDATES = ['/', '/busca?q=leche', '/search?q=leche', '/lacteos']
-
-/** URLs con pinta de API que aparezcan en el HTML. */
-function extractApiHints(html: string): string[] {
-  const found = new Set<string>()
-  const patterns = [
-    /https?:\/\/[a-zA-Z0-9._-]+\/[^"'\s\\]{0,120}?(?:api|graphql|search|catalog)[^"'\s\\]{0,120}/gi,
-    /"\/(?:api|_v)\/[^"'\s\\]{0,140}"/gi,
-    /"(?:apiUrl|baseUrl|endpoint|graphqlUrl|searchUrl|API_URL)"\s*:\s*"[^"]{0,200}"/gi,
-  ]
-  for (const re of patterns) {
-    for (const m of html.matchAll(re)) {
-      const hit = m[0].replace(/^"|"$/g, '')
-      if (hit.includes('_next/static')) continue // chunks de build, no API
-      found.add(hit.slice(0, 200))
-      if (found.size >= 60) return [...found]
-    }
+/** Hosts únicos referenciados en el HTML; ahí aparece el backend real. */
+function extractHosts(html: string) {
+  const counts = new Map<string, number>()
+  for (const m of html.matchAll(/https?:\/\/([a-zA-Z0-9._-]+)/g)) {
+    const host = m[1].toLowerCase()
+    if (NOISE.test(host)) continue
+    counts.set(host, (counts.get(host) || 0) + 1)
   }
-  return [...found]
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 30)
+    .map(([host, n]) => `${host} (${n})`)
 }
 
-async function probe(path: string) {
+/** Contexto alrededor de marcadores que delatan datos de producto o una API. */
+function extractContext(html: string, markers: string[], perMarker = 2, radius = 200) {
+  const out: Record<string, string[]> = {}
+  for (const marker of markers) {
+    const hits: string[] = []
+    let from = 0
+    while (hits.length < perMarker) {
+      const i = html.indexOf(marker, from)
+      if (i === -1) break
+      hits.push(html.slice(Math.max(0, i - radius), i + radius).replace(/\s+/g, ' '))
+      from = i + marker.length
+    }
+    if (hits.length) out[marker] = hits
+  }
+  return out
+}
+
+const PRODUCT_MARKERS = [
+  'productName', 'sellingPrice', 'listPrice', 'ListPrice', 'skuId', 'productId',
+  'addToCart', 'itemsSold', '"price"', 'Precio', 'graphql', 'apiUrl', 'API_URL',
+  'x-api-key', 'algolia', 'cencosud', 'vtex',
+]
+
+async function probe(path: string, deep = false) {
   const started = Date.now()
   try {
     const res = await fetch(ORIGIN + path, { headers: UPSTREAM_HEADERS, redirect: 'follow' })
@@ -67,27 +76,28 @@ async function probe(path: string) {
     const contentType = res.headers.get('content-type') || ''
     const isJson = contentType.includes('json')
 
-    let items: number | null = null
-    if (isJson) {
-      try {
-        const parsed = JSON.parse(body)
-        items = Array.isArray(parsed)
-          ? parsed.length
-          : Array.isArray(parsed?.products) ? parsed.products.length : null
-      } catch { /* no parseable */ }
-    }
-
-    return {
+    const base: Record<string, unknown> = {
       path,
       status: res.status,
       ms: Date.now() - started,
       contentType,
-      items,
-      isJson,
-      preview: isJson ? body.slice(0, 400) : undefined,
-      hasNextData: !isJson ? body.includes('__NEXT_DATA__') : undefined,
-      apiHints: !isJson ? extractApiHints(body) : undefined,
+      bytes: body.length,
+      finalUrl: res.url,
     }
+
+    if (isJson) {
+      base.preview = body.slice(0, 600)
+      return base
+    }
+
+    base.mentionsLeche = /leche/i.test(body)
+    base.hasRscPayload = body.includes('__next_f')
+
+    if (deep) {
+      base.hosts = extractHosts(body)
+      base.context = extractContext(body, PRODUCT_MARKERS)
+    }
+    return base
   } catch (err) {
     return { path, status: 0, ms: Date.now() - started, error: String(err) }
   }
@@ -99,14 +109,14 @@ Deno.serve(async (req: Request) => {
   const url = new URL(req.url)
 
   if (url.searchParams.get('discover') === '1') {
-    const apis = []
-    for (const p of API_CANDIDATES) apis.push(await probe(p))
+    // La ruta de búsqueda real, según el marcado schema.org del propio sitio.
+    const search = await probe('/busqueda?ft=leche', true)
 
-    const pages = []
-    for (const p of PAGE_CANDIDATES) pages.push(await probe(p))
+    // El sitemap suele listar el catálogo completo sin necesidad de API.
+    const sitemap = await probe('/sitemap.xml')
 
     return new Response(
-      JSON.stringify({ apis, pages }, null, 2),
+      JSON.stringify({ search, sitemap }, null, 2),
       { headers: JSON_HEADERS }
     )
   }
@@ -118,7 +128,6 @@ Deno.serve(async (req: Request) => {
       { status: 400, headers: JSON_HEADERS }
     )
   }
-  // El origen está fijo, así que solo hay que evitar que path cambie de host.
   if (!path.startsWith('/') || path.startsWith('//')) {
     return new Response(
       JSON.stringify({ error: 'path debe ser una ruta relativa de jumbo.cl' }),
