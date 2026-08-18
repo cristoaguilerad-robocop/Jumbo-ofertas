@@ -149,6 +149,84 @@ async function fetchHtml(path: string) {
   return { status: res.status, html: await res.text() }
 }
 
+function locsIn(xml: string): string[] {
+  return [...xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/g)].map(m => m[1])
+}
+
+/** Ruta limpia de una URL de jumbo.cl, o null si no es una categoría. */
+function categoryPathOf(rawUrl: string): string | null {
+  let path: string
+  try {
+    path = new URL(rawUrl).pathname
+  } catch {
+    return null
+  }
+  // Las fichas de producto terminan en /p; el resto son navegación.
+  if (/\/p\/?$/.test(path)) return null
+  const clean = path.replace(/^\/+|\/+$/g, '')
+  if (!clean) return null
+  // Más de tres niveles ya es demasiado específico para valer un crawl aparte.
+  if (clean.split('/').length > 3) return null
+  if (/\.(xml|html?|json|jpg|png|webp|pdf)$/i.test(clean)) return null
+  return clean
+}
+
+/**
+ * Rutas de categoría de jumbo.cl, sacadas del sitemap y del menú de la home.
+ * Se usan dos fuentes porque ninguna es completa por sí sola.
+ */
+async function discoverCategories() {
+  const fromSitemap = new Set<string>()
+  const fromNav = new Set<string>()
+  let productUrls = 0
+  let childSitemapsRead = 0
+
+  // 1. Sitemap (puede ser un índice que apunta a otros sitemaps)
+  try {
+    const root = await fetchHtml('/sitemap.xml')
+    const locs = locsIn(root.html)
+    const children = locs.filter(u => /\.xml$/i.test(u)).slice(0, 8)
+    const direct = locs.filter(u => !/\.xml$/i.test(u))
+
+    const allUrls = [...direct]
+    for (const child of children) {
+      try {
+        const res = await fetch(child, { headers: UPSTREAM_HEADERS })
+        allUrls.push(...locsIn(await res.text()))
+        childSitemapsRead++
+      } catch { /* un sitemap hijo caído no aborta el resto */ }
+      if (allUrls.length > 80000) break
+    }
+
+    for (const u of allUrls) {
+      const path = categoryPathOf(u)
+      if (path) fromSitemap.add(path)
+      else productUrls++
+    }
+  } catch { /* se sigue con el menú */ }
+
+  // 2. Menú de la home
+  try {
+    const home = await fetchHtml('/')
+    for (const m of home.html.matchAll(/href="\/([a-z0-9][a-z0-9\-/]{2,60})"/gi)) {
+      const path = categoryPathOf(`${ORIGIN}/${m[1]}`)
+      if (path) fromNav.add(path)
+    }
+  } catch { /* el sitemap ya puede bastar */ }
+
+  const categories = [...new Set([...fromSitemap, ...fromNav])].sort()
+  return {
+    categories: categories.slice(0, 1200),
+    stats: {
+      total: categories.length,
+      fromSitemap: fromSitemap.size,
+      fromNav: fromNav.size,
+      productUrls,
+      childSitemapsRead,
+    },
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
@@ -173,6 +251,11 @@ Deno.serve(async (req: Request) => {
       }
       const products = extractProducts(html)
       return new Response(JSON.stringify({ products, page, path }), { headers: JSON_HEADERS })
+    }
+
+    // --- Rutas de categoría, para el crawl del catálogo ---
+    if (url.searchParams.get('categories') === '1') {
+      return new Response(JSON.stringify(await discoverCategories()), { headers: JSON_HEADERS })
     }
 
     // --- Pistas para armar el crawl completo ---

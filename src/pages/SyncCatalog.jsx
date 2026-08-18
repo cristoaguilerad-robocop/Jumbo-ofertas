@@ -3,6 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { isConfigured } from '../supabase'
 import { syncCatalog, loadProgress, clearProgress, countCatalog } from '../lib/catalogSync'
 import { discoverApi } from '../lib/jumboApi'
+import { EXCLUDED_SECTIONS } from '../lib/catalogFilters'
+
+const SECTION_LABELS = {
+  ropa: 'Ropa', mascotas: 'Mascotas', hogar: 'Hogar', jugueteria: 'Juguetería',
+}
 
 export default function SyncCatalog() {
   const navigate = useNavigate()
@@ -108,6 +113,16 @@ export default function SyncCatalog() {
               Las peticiones pasan por un proxy propio, porque la API de Jumbo no permite que la
               llamen desde otro dominio.
             </p>
+            <div className="border-t border-gray-700 pt-3">
+              <p className="text-gray-400 text-xs mb-2">Secciones excluidas del catálogo:</p>
+              <div className="flex flex-wrap gap-1.5">
+                {Object.keys(EXCLUDED_SECTIONS).map(section => (
+                  <span key={section} className="px-2 py-1 rounded-lg bg-gray-700 text-gray-300 text-[11px]">
+                    {SECTION_LABELS[section] || section}
+                  </span>
+                ))}
+              </div>
+            </div>
             <div className="flex gap-2">
               <button
                 onClick={() => start(false)}
@@ -160,7 +175,18 @@ export default function SyncCatalog() {
             </div>
 
             {progress?.currentCategory && (
-              <p className="text-gray-500 text-xs truncate">{progress.currentCategory}</p>
+              <p className="text-gray-500 text-xs truncate">
+                {progress.currentCategory}
+                {progress.currentPage > 1 && ` · página ${progress.currentPage}`}
+              </p>
+            )}
+            {progress?.excludedCount > 0 && (
+              <p className="text-gray-500 text-xs">
+                {progress.excludedCount} categorías omitidas por filtro
+                {progress.excludedSections?.length
+                  ? ` (${progress.excludedSections.map(s => SECTION_LABELS[s] || s).join(', ')})`
+                  : ''}
+              </p>
             )}
             {progress?.failed > 0 && (
               <p className="text-orange-400 text-xs">
