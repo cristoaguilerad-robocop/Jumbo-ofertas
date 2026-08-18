@@ -14,7 +14,13 @@
 //   ?category=lacteos      productos de una categoría
 //   ?categories=1          rutas de categoría, del sitemap y del menú
 //   ?benchmark=1           compara estrategias de descarga (KB por producto)
+//   ?cnstrc=1              busca la clave de Constructor.io y prueba su API
 //   ?path=/...             proxy crudo de una ruta de jumbo.cl
+//
+// Medición (2026-08, /busqueda?ft=leche, 41 productos):
+//   HTML completo        1754 KB   43 KB/producto
+//   cabecera RSC: 1       907 KB   22 KB/producto  <- se usa esta
+//   resultsPerPage/count/pageSize: los ignora, siempre 41 productos
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -119,9 +125,16 @@ function normalize(p: RscProduct) {
   }
 }
 
-/** Productos de una página de jumbo.cl, leídos de su payload RSC. */
-function extractProducts(html: string) {
-  const flight = decodeRscPayload(html)
+/**
+ * Productos de una página de jumbo.cl, leídos de su payload RSC.
+ *
+ * Acepta las dos formas del payload: el HTML normal, que lo trae troceado en
+ * self.__next_f.push(...), y la respuesta a una petición con cabecera RSC,
+ * que ya viene como flight crudo (text/x-component) y pesa la mitad.
+ */
+function extractProducts(body: string) {
+  const chunked = decodeRscPayload(body)
+  const flight = chunked.length > 0 ? chunked : body
   const marker = '{"productId":"'
   const seen = new Set<string>()
   const products = []
@@ -146,8 +159,16 @@ function extractProducts(html: string) {
   return products
 }
 
-async function fetchHtml(path: string) {
-  const res = await fetch(ORIGIN + path, { headers: UPSTREAM_HEADERS, redirect: 'follow' })
+/**
+ * Pide una página de jumbo.cl. Con `rsc` se manda la cabecera RSC: Next.js
+ * responde solo el payload de datos en vez de la página completa, lo que en la
+ * medición bajó de 1754 KB a 907 KB con los mismos 41 productos.
+ */
+async function fetchHtml(path: string, rsc = false) {
+  const res = await fetch(ORIGIN + path, {
+    headers: rsc ? { ...UPSTREAM_HEADERS, RSC: '1' } : UPSTREAM_HEADERS,
+    redirect: 'follow',
+  })
   return { status: res.status, html: await res.text() }
 }
 
@@ -244,15 +265,30 @@ Deno.serve(async (req: Request) => {
         ? `/busqueda?ft=${encodeURIComponent(search)}${page > 1 ? `&page=${page}` : ''}`
         : `/${category}${page > 1 ? `?page=${page}` : ''}`
 
-      const { status, html } = await fetchHtml(path)
+      // Se pide primero el payload RSC, que pesa la mitad. Si no rinde
+      // productos se reintenta con la página completa, para que un cambio de
+      // formato degrade el rendimiento en vez de romper el crawl.
+      let via = 'rsc'
+      const light = await fetchHtml(path, true)
+      let status = light.status
+      let products = status === 200 ? extractProducts(light.html) : []
+
+      if (!products.length) {
+        const full = await fetchHtml(path)
+        status = full.status
+        if (status === 200) {
+          products = extractProducts(full.html)
+          via = 'html'
+        }
+      }
+
       if (status !== 200) {
         return new Response(
           JSON.stringify({ products: [], error: `Jumbo respondió ${status}`, path }),
           { headers: JSON_HEADERS }
         )
       }
-      const products = extractProducts(html)
-      return new Response(JSON.stringify({ products, page, path }), { headers: JSON_HEADERS })
+      return new Response(JSON.stringify({ products, page, path, via }), { headers: JSON_HEADERS })
     }
 
     // --- Rutas de categoría, para el crawl del catálogo ---
@@ -320,11 +356,76 @@ Deno.serve(async (req: Request) => {
       }, null, 2), { headers: JSON_HEADERS })
     }
 
+    // --- Constructor.io: buscar su clave y probar su API ---
+    //
+    // Su motor de búsqueda devuelve JSON compacto en vez de páginas de ~900 KB.
+    // La clave no está en el HTML de jumbo.cl sino dentro del bundle que sirven
+    // desde cnstrc.com, así que hay que bajarlo y leerlo.
+    if (url.searchParams.get('cnstrc') === '1') {
+      const bundles = [
+        'https://cnstrc.com/js/cust/cencosud_0BmS-e.js',
+        'https://ac.cnstrc.com/js/cust/cencosud_0BmS-e.js',
+      ]
+
+      const candidates = new Set<string>()
+      const bundleInfo = []
+      for (const b of bundles) {
+        try {
+          const res = await fetch(b, { headers: UPSTREAM_HEADERS })
+          const js = await res.text()
+          bundleInfo.push({ url: b, status: res.status, kb: Math.round(js.length / 1024) })
+          if (!res.ok) continue
+          for (const m of js.matchAll(/key_[A-Za-z0-9_-]{6,}/g)) candidates.add(m[0])
+          for (const m of js.matchAll(/["'](?:apiKey|api_key|indexKey|key)["']\s*:\s*["']([A-Za-z0-9_-]{8,})["']/g)) {
+            candidates.add(m[1])
+          }
+        } catch (err) {
+          bundleInfo.push({ url: b, error: String(err) })
+        }
+      }
+
+      // Cada clave candidata se prueba contra su API de búsqueda.
+      const tests = []
+      for (const key of [...candidates].slice(0, 8)) {
+        const api = `https://ac.cnstrc.com/search/leche?key=${encodeURIComponent(key)}`
+          + '&i=00000000-0000-4000-8000-000000000000&s=1&c=ciojs-client-2.35.0'
+          + '&num_results_per_page=100&page=1'
+        try {
+          const res = await fetch(api, { headers: { Accept: 'application/json', Referer: `${ORIGIN}/` } })
+          const body = await res.text()
+          let results = null
+          let total = null
+          try {
+            const json = JSON.parse(body)
+            results = json?.response?.results?.length ?? null
+            total = json?.response?.total_num_results ?? null
+          } catch { /* no era JSON */ }
+          tests.push({
+            key,
+            status: res.status,
+            kb: Math.round(body.length / 1024),
+            results,
+            total,
+            kbPerProduct: results ? Math.round((body.length / 1024 / results) * 100) / 100 : null,
+            preview: results ? undefined : body.slice(0, 200),
+          })
+        } catch (err) {
+          tests.push({ key, error: String(err) })
+        }
+      }
+
+      return new Response(JSON.stringify({
+        bundles: bundleInfo,
+        candidateKeys: [...candidates].slice(0, 20),
+        tests: tests.sort((a, b) => (b.results ?? -1) - (a.results ?? -1)),
+      }, null, 2), { headers: JSON_HEADERS })
+    }
+
     // --- Proxy crudo ---
     const path = url.searchParams.get('path')
     if (!path) {
       return new Response(
-        JSON.stringify({ error: 'Usa ?search=, ?category=, ?categories=1, ?benchmark=1 o ?path=' }),
+        JSON.stringify({ error: 'Usa ?search=, ?category=, ?categories=1, ?benchmark=1, ?cnstrc=1 o ?path=' }),
         { status: 400, headers: JSON_HEADERS }
       )
     }
