@@ -33,14 +33,18 @@ export default function ProductCard({ product, showAddButton = true }) {
   return (
     <div
       className="bg-gray-800 rounded-2xl p-4 flex items-center gap-3 cursor-pointer hover:bg-gray-750 active:scale-[0.98] transition-all"
-      onClick={() => navigate(`/product/${product.id}`)}
+      onClick={() => navigate(`/product/${product.id}`, { state: { product } })}
     >
-      {/* Icon */}
-      <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0 ${
-        product.isOnSale ? 'bg-orange-500/10' : 'bg-gray-700'
-      }`}>
-        {CATEGORY_EMOJIS[product.category] || '🛒'}
-      </div>
+      {/* Icon / Image */}
+      {product.imageUrl ? (
+        <img src={product.imageUrl} alt={product.name} className="w-12 h-12 rounded-xl object-contain shrink-0 bg-white p-1" />
+      ) : (
+        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0 ${
+          product.isOnSale ? 'bg-orange-500/10' : 'bg-gray-700'
+        }`}>
+          {CATEGORY_EMOJIS[product.category] || '🛒'}
+        </div>
+      )}
 
       {/* Info */}
       <div className="flex-1 min-w-0">

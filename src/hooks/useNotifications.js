@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react'
+import { useCallback } from 'react'
 import { mockProducts } from '../data/mockProducts'
 
 export function useNotifications() {
@@ -6,35 +6,36 @@ export function useNotifications() {
     if (!('Notification' in window)) return 'unsupported'
     if (Notification.permission === 'granted') return 'granted'
     if (Notification.permission === 'denied') return 'denied'
-    const result = await Notification.requestPermission()
-    return result
+    return await Notification.requestPermission()
   }, [])
 
   const checkPriceDrops = useCallback((shoppingList) => {
     if (!('Notification' in window) || Notification.permission !== 'granted') return
 
-    const listItems = Object.values(shoppingList)
-    const drops = listItems.filter(item => {
+    const alerts = []
+
+    Object.values(shoppingList).forEach(item => {
       const current = mockProducts.find(p => p.id === item.productId)
-      return current && current.isOnSale && current.currentPrice < item.priceWhenAdded
+      const currentPrice = current?.currentPrice ?? item.priceWhenAdded
+
+      // Alert 1: price dropped vs when added
+      if (current?.isOnSale && currentPrice < item.priceWhenAdded) {
+        alerts.push(`${item.name} bajó a $${currentPrice.toLocaleString('es-CL')}`)
+      }
+
+      // Alert 2: price reached target
+      if (item.targetPrice && currentPrice <= item.targetPrice) {
+        alerts.push(`${item.name} llegó a tu precio objetivo ($${currentPrice.toLocaleString('es-CL')})`)
+      }
     })
 
-    if (drops.length > 0) {
-      const names = drops.map(d => {
-        const p = mockProducts.find(pr => pr.id === d.productId)
-        return p ? p.name : d.name
-      })
-      const body = drops.length === 1
-        ? `${names[0]} está en oferta ahora.`
-        : `${names[0]} y ${drops.length - 1} producto(s) más están en oferta.`
+    if (alerts.length === 0) return
 
-      new Notification('Jumbo Ofertas', {
-        body,
-        icon: '/favicon.svg',
-        badge: '/favicon.svg',
-        tag: 'price-drop',
-      })
-    }
+    new Notification('Jumbo Ofertas 🛒', {
+      body: alerts.length === 1 ? alerts[0] : `${alerts[0]} y ${alerts.length - 1} más.`,
+      icon: '/favicon.svg',
+      tag: 'price-drop',
+    })
   }, [])
 
   return { requestPermission, checkPriceDrops }
