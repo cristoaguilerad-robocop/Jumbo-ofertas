@@ -3,14 +3,17 @@ import { fetchCategories, fetchCategory } from './jumboApi'
 import { excludedBy, prettifySlug } from './catalogFilters'
 
 const UPSERT_BATCH = 400
-const THROTTLE_MS = 150
+const THROTTLE_MS = 60
 // Cuántas categorías se recorren a la vez. El tiempo se va casi todo esperando
-// la red, así que unas pocas en paralelo multiplican el rendimiento sin
-// castigar a jumbo.cl.
-const CONCURRENCY = 4
+// la red, así que varias en paralelo multiplican el rendimiento sin castigar a
+// jumbo.cl.
+const CONCURRENCY = 8
 // Tope por categoría: acota el tiempo total y evita quedarse pegado si la
 // paginación de Jumbo nunca deja de responder.
 const MAX_PAGES_PER_CATEGORY = 40
+// Presupuesto de tiempo. Al agotarse, el crawl se detiene de forma ordenada y
+// deja el progreso guardado, en vez de correr indefinidamente.
+const TIME_BUDGET_MS = 10 * 60 * 1000
 const PROGRESS_KEY = 'jumbo_sync_progress'
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
@@ -132,11 +135,16 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
 
   const active = new Set()
   let cursor = 0
+  let outOfTime = false
+
+  const budgetSpent = () => Date.now() - startedAt >= TIME_BUDGET_MS
 
   async function crawlOne(categoryPath) {
     const seen = new Set()
     for (let page = 1; page <= MAX_PAGES_PER_CATEGORY; page++) {
       if (signal?.aborted) throw new DOMException('Sincronización cancelada', 'AbortError')
+
+      if (budgetSpent()) { outOfTime = true; break }
 
       const products = await fetchCategory(categoryPath, page, signal)
       if (!products.length) break
@@ -157,6 +165,8 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
   async function worker() {
     while (cursor < categories.length) {
       if (signal?.aborted) throw new DOMException('Sincronización cancelada', 'AbortError')
+
+      if (budgetSpent()) { outOfTime = true; return }
 
       const categoryPath = categories[cursor++]
       if (done.has(categoryPath)) continue
@@ -180,10 +190,11 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
 
   await Promise.all(Array.from({ length: CONCURRENCY }, worker))
 
-  report(snapshot({ phase: 'done' }))
+  report(snapshot({ phase: 'done', outOfTime }))
   return {
     totalSaved,
     failed,
+    outOfTime,
     categories: categories.length,
     excluded: excluded.length,
   }

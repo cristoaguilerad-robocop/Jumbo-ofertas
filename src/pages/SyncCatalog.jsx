@@ -225,9 +225,17 @@ export default function SyncCatalog() {
         )}
 
         {progress?.phase === 'done' && !running && (
-          <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 text-sm text-green-400">
-            Catálogo sincronizado: {progress.totalSaved.toLocaleString('es-CL')} productos.
-          </div>
+          progress.outOfTime ? (
+            <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4 text-sm text-orange-400">
+              Se alcanzó el límite de 10 minutos con {progress.totalSaved.toLocaleString('es-CL')} productos
+              y {progress.doneCategories} de {progress.totalCategories} categorías.
+              Toca «Retomar sincronización» para continuar donde quedó.
+            </div>
+          ) : (
+            <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 text-sm text-green-400">
+              Catálogo sincronizado: {progress.totalSaved.toLocaleString('es-CL')} productos.
+            </div>
+          )
         )}
 
         {error && (
