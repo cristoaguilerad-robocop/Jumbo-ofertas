@@ -56,13 +56,23 @@ function saveProgress(p) {
  * por categoría, que solo contaba fallas sin mostrar el motivo.
  */
 async function preflight() {
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) {
-    throw new Error(
-      'No hay sesión activa en Supabase. Revisa que los inicios de sesión ' +
-      'anónimos estén habilitados en Authentication → Sign In / Up.' +
-      (authError ? ` (${authError.message})` : '')
-    )
+  let { data: { user } } = await supabase.auth.getUser()
+
+  // No se depende de que AppProvider ya haya iniciado sesión: puede no haber
+  // alcanzado a terminar, o haber fallado sin que nadie reintente.
+  if (!user) {
+    const { data, error } = await supabase.auth.signInAnonymously()
+    if (error) {
+      throw new Error(
+        `No se pudo iniciar sesión anónima: ${error.message}. Habilita ` +
+        '«Allow anonymous sign-ins» en Authentication → Sign In / Providers.'
+      )
+    }
+    user = data?.user ?? null
+  }
+
+  if (!user) {
+    throw new Error('No hay sesión activa en Supabase y no se pudo crear una.')
   }
 
   const probeId = `preflight_${Date.now()}`
