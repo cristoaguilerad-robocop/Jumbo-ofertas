@@ -1,16 +1,25 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getOnSaleProducts } from '../data/mockProducts'
 import { useApp } from '../context/AppContext'
 import { useNotifications } from '../hooks/useNotifications'
+import { getOffers } from '../lib/catalogDb'
+import { countCatalog } from '../lib/catalogSync'
 import ProductCard from '../components/ProductCard'
 
-const offerProducts = getOnSaleProducts().slice(0, 6)
+const mockOffers = getOnSaleProducts().slice(0, 6)
 
 export default function Home() {
   const navigate = useNavigate()
   const { shoppingList } = useApp()
   const { requestPermission, checkPriceDrops } = useNotifications()
+  const [offerProducts, setOfferProducts] = useState(mockOffers)
+  const [catalogCount, setCatalogCount] = useState(null)
+
+  useEffect(() => {
+    countCatalog().then(setCatalogCount)
+    getOffers(6).then(offers => { if (offers?.length) setOfferProducts(offers) })
+  }, [])
 
   useEffect(() => {
     const listSize = Object.keys(shoppingList).length
@@ -61,6 +70,33 @@ export default function Home() {
             <p className="text-gray-400 text-xs mt-0.5">Usa la cámara</p>
           </button>
         </div>
+
+        {/* Catálogo: siempre accesible, cambia el mensaje según si ya se sincronizó */}
+        <button
+          onClick={() => navigate('/sync')}
+          className={`w-full rounded-2xl p-4 flex items-center gap-3 text-left active:scale-[0.98] transition-all ${
+            catalogCount > 0
+              ? 'bg-gray-800 hover:bg-gray-750'
+              : 'bg-green-500/10 border border-green-500/20'
+          }`}
+        >
+          <div className="w-12 h-12 bg-green-500/10 rounded-xl flex items-center justify-center text-2xl shrink-0">
+            📦
+          </div>
+          <div className="flex-1">
+            <p className="text-white font-medium text-sm">
+              {catalogCount > 0 ? 'Mi catálogo Jumbo' : 'Descargar catálogo completo'}
+            </p>
+            <p className="text-gray-400 text-xs mt-0.5">
+              {catalogCount > 0
+                ? `${catalogCount.toLocaleString('es-CL')} productos · toca para actualizar`
+                : 'Busca entre todos los productos de Jumbo al instante'}
+            </p>
+          </div>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-gray-400">
+            <path fillRule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
+          </svg>
+        </button>
 
         {/* List summary */}
         {listCount > 0 && (

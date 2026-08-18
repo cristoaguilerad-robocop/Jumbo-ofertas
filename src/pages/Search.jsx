@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { CATEGORIES } from '../data/mockProducts'
-import { useProducts, searchByBarcode } from '../hooks/useProducts'
+import { useProducts, useCategories, searchByBarcode } from '../hooks/useProducts'
 import ProductCard from '../components/ProductCard'
 import BarcodeScanner from '../components/BarcodeScanner'
 import EmptyState from '../components/EmptyState'
@@ -16,8 +16,9 @@ export default function Search() {
 
   const {
     query, setQuery, category, setCategory, onlyOffers, setOnlyOffers,
-    results, loading, loadingMore, hasMore, loadMore, error, isLive,
+    results, loading, loadingMore, hasMore, loadMore, error, isLive, source,
   } = useProducts()
+  const categories = useCategories(CATEGORIES)
 
   useEffect(() => {
     if (searchParams.get('scanner') === '1') setShowScanner(true)
@@ -108,7 +109,7 @@ export default function Search() {
           </div>
 
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-            {CATEGORIES.map(cat => (
+            {categories.map(cat => (
               <button
                 key={cat}
                 onClick={() => setCategory(cat)}
@@ -155,7 +156,9 @@ export default function Search() {
           <>
             <p className="text-gray-500 text-xs px-1">
               {results.length} {results.length === 1 ? 'producto' : 'productos'}
-              {isLive ? ' desde Jumbo' : ' en catálogo local'}
+              {source === 'catalog' ? ' en tu catálogo Jumbo'
+                : source === 'jumbo' ? ' desde Jumbo en vivo'
+                : ' en catálogo local'}
             </p>
             {results.map(product => (
               <ProductCard key={product.id} product={product} />
