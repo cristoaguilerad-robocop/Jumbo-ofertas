@@ -281,8 +281,16 @@ async function probeConstructor() {
     }
   }
 
+  // Ya se sabe a qué cadena pertenece cada clave; solo se vuelven a probar
+  // las de jumbo.cl, que son las candidatas reales.
+  const JUMBO_KEYS = [
+    'key_JopvNXKS61kwGkBe',
+    'key_DFB3C0u9Wbjq8StU',
+    'key_9NpwWxusNvJ2Cyhk',
+    'key_tUrIQxBOU2aGAGad',
+  ]
   const tests = []
-  for (const key of [...candidates].slice(0, 16)) {
+  for (const key of JUMBO_KEYS.filter(k => candidates.has(k))) {
     const api = `https://ac.cnstrc.com/search/leche?key=${encodeURIComponent(key)}`
       + '&i=00000000-0000-4000-8000-000000000000&s=1&c=ciojs-client-2.35.0'
       + '&num_results_per_page=100&page=1'
@@ -292,6 +300,8 @@ async function probeConstructor() {
       let results = null
       let total = null
       let samples: unknown[] = []
+      let rawFirst: string | null = null
+      let priceFields: string[] = []
       try {
         const json = JSON.parse(body)
         const list = json?.response?.results ?? []
@@ -305,6 +315,20 @@ async function probeConstructor() {
           url: r?.data?.url ?? r?.data?.link ?? null,
           id: r?.data?.id ?? null,
         }))
+
+        // Los precios de Constructor no calzan con los del sitio: para la
+        // Leche Soprole 1 L devuelve 1320 donde jumbo.cl muestra 1250. Antes
+        // de descartarlo hay que ver todos los campos, por si el precio bueno
+        // está en otro que no se está leyendo.
+        const first = list[0]
+        if (first?.data?.url?.includes('jumbo.cl')) {
+          rawFirst = JSON.stringify(first).slice(0, 1800)
+          priceFields = Object.entries(first.data ?? {})
+            .filter(([k, v]) =>
+              /price|precio|valor|amount|discount|promo|oferta/i.test(k) ||
+              (typeof v === 'number' && v > 50 && v < 1000000))
+            .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+        }
       } catch { /* no era JSON */ }
       tests.push({
         key,
@@ -314,6 +338,8 @@ async function probeConstructor() {
         total,
         kbPerProduct: results ? Math.round((body.length / 1024 / results) * 100) / 100 : null,
         samples,
+        priceFields: priceFields.length ? priceFields : undefined,
+        rawFirst: rawFirst || undefined,
         preview: results ? undefined : body.slice(0, 200),
       })
     } catch (err) {
