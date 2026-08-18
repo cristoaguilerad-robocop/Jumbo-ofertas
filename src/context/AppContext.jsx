@@ -23,9 +23,24 @@ export function AppProvider({ children }) {
       return
     }
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) setUser(session.user)
-      else supabase.auth.signInAnonymously().then(({ data }) => { if (data?.user) setUser(data.user) })
-      setAuthLoading(false)
+      if (session) {
+        setUser(session.user)
+        setAuthLoading(false)
+        return
+      }
+      supabase.auth.signInAnonymously().then(({ data, error }) => {
+        if (error) {
+          // Sin esto el fallo era invisible y la app quedaba sin permisos de
+          // escritura sin decir por qué.
+          console.error(
+            'No se pudo iniciar sesión anónima en Supabase:', error.message,
+            '— revisa «Allow anonymous sign-ins» en Authentication.'
+          )
+        } else if (data?.user) {
+          setUser(data.user)
+        }
+        setAuthLoading(false)
+      })
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setUser(s?.user ?? null))
     return () => subscription.unsubscribe()
