@@ -55,7 +55,14 @@ export async function fetchByBarcode(barcode, signal) {
   return fetchSearch(barcode, 1, signal)
 }
 
-/** Pistas del sitemap y del backend, para armar el crawl del catálogo. */
+/** Rutas de categoría de jumbo.cl, del sitemap y del menú de la home. */
+export async function fetchCategories() {
+  const json = await callProxy({ categories: '1' })
+  if (json.error) throw new Error(json.error)
+  return { categories: json.categories || [], stats: json.stats || {} }
+}
+
+/** Pistas del sitemap y del backend, para diagnóstico. */
 export async function discoverApi() {
   return callProxy({ discover: '2' })
 }
