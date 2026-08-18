@@ -1,0 +1,27 @@
+name: Deploy Edge Functions
+
+# Despliega el proxy a Supabase cuando cambia, para no tener que copiarlo a
+# mano en el dashboard. Requiere el secret SUPABASE_ACCESS_TOKEN.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/**'
+      - '.github/workflows/deploy-functions.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # El project ref no es secreto: ya viaja en el bundle público de la app.
+      - name: Deploy search-products
+        run: supabase functions deploy search-products --project-ref xadghsavmajbzjzptlvo
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
