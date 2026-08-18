@@ -14,7 +14,10 @@ export default function Search() {
   const [scanError, setScanError] = useState(null)
   const [scanLoading, setScanLoading] = useState(false)
 
-  const { query, setQuery, category, setCategory, onlyOffers, setOnlyOffers, results, loading, isLive } = useProducts()
+  const {
+    query, setQuery, category, setCategory, onlyOffers, setOnlyOffers,
+    results, loading, loadingMore, hasMore, loadMore, error, isLive,
+  } = useProducts()
 
   useEffect(() => {
     if (searchParams.get('scanner') === '1') setShowScanner(true)
@@ -134,6 +137,12 @@ export default function Search() {
           </div>
         )}
 
+        {!scanLoading && error && (
+          <div className="bg-gray-800 border border-gray-700 rounded-xl p-3 text-xs text-gray-400">
+            No se pudo conectar con Jumbo ({error}). Mostrando catálogo local.
+          </div>
+        )}
+
         {!scanLoading && results.length === 0 && !loading && (
           <EmptyState
             icon="🔍"
@@ -151,6 +160,16 @@ export default function Search() {
             {results.map(product => (
               <ProductCard key={product.id} product={product} />
             ))}
+
+            {hasMore && (
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="w-full py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium transition-colors disabled:opacity-60"
+              >
+                {loadingMore ? 'Cargando...' : 'Cargar más productos'}
+              </button>
+            )}
           </>
         )}
       </div>
