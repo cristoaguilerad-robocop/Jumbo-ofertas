@@ -71,7 +71,7 @@ export default function SyncCatalog() {
 
   return (
     <div className="min-h-screen bg-gray-950 pb-nav">
-      <div className="bg-gray-900 px-4 pt-safe pt-6 pb-4">
+      <div className="bg-gray-900 px-4 pt-header pb-4">
         <div className="max-w-lg mx-auto">
           <button onClick={() => navigate(-1)} className="text-gray-400 text-sm mb-2">← Volver</button>
           <h1 className="text-white font-bold text-xl">Catálogo completo</h1>
