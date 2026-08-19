@@ -332,6 +332,12 @@ export default function SyncCatalog() {
           </div>
         )}
 
+        {/* Qué versión de la app está corriendo. Sin esto no había forma de
+            distinguir un error real de un build viejo servido desde caché. */}
+        <p className="text-gray-600 text-[11px] text-center">
+          versión <span className="font-mono">{__BUILD_COMMIT__}</span> · {__BUILD_TIME__} UTC
+        </p>
+
         {/* Diagnóstico: qué responde Jumbo desde el servidor del proxy */}
         <div className="bg-gray-800 rounded-2xl p-4 space-y-3">
           <div>
