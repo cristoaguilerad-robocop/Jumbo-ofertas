@@ -1,22 +1,28 @@
 import { useCallback } from 'react'
 import { mockProducts } from '../data/mockProducts'
 import { getPricesForIds } from '../lib/catalogDb'
+import { refreshListPrices } from '../lib/priceRefresh'
 
 function formatCLP(n) {
   return `$${n.toLocaleString('es-CL')}`
 }
 
 /**
- * Precios actuales para los productos de la lista. Prefiere el catálogo
- * indexado; para los que no estén ahí consulta Jumbo en vivo.
+ * Precios actuales para los productos de la lista.
+ *
+ * Se consultan en vivo a Jumbo, no al catálogo indexado: entre
+ * sincronizaciones ese catálogo envejece, y una alerta de bajada que compara
+ * contra una foto vieja no sirve. El catálogo queda de respaldo para lo que no
+ * se pueda refrescar.
  */
 async function resolveCurrentPrices(items) {
   const ids = items.map(i => i.productId)
   const prices = await getPricesForIds(ids).catch(() => ({}))
 
-  // Los productos de Jumbo que no estén en el catálogo indexado se quedan sin
-  // precio fresco: refrescarlos exige abrir la página de cada uno, lo que aún
-  // no está implementado.
+  const fresh = await refreshListPrices(items).catch(() => ({}))
+  for (const [id, product] of Object.entries(fresh)) {
+    prices[id] = { currentPrice: product.currentPrice, isOnSale: product.isOnSale }
+  }
 
   // Los productos mock no viven en Supabase ni en Jumbo.
   for (const id of ids) {

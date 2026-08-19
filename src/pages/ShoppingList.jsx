@@ -1,7 +1,9 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { getProductById, formatPrice } from '../data/mockProducts'
+import { getPricesForIds } from '../lib/catalogDb'
+import { refreshListPrices } from '../lib/priceRefresh'
 import OfferBadge from '../components/OfferBadge'
 import EmptyState from '../components/EmptyState'
 
@@ -22,11 +24,43 @@ export default function ShoppingList() {
   const navigate = useNavigate()
   const { shoppingList, removeFromList } = useApp()
 
-  const grouped = useMemo(() => {
-    const items = Object.values(shoppingList).map(item => {
-      const current = getProductById(item.productId)
-      return { ...item, current }
+  // Precios vivos. Antes se resolvían contra el catálogo mock de 50 productos,
+  // así que un producto real de Jumbo mostraba para siempre el precio del día
+  // en que se agregó.
+  const [livePrices, setLivePrices] = useState({})
+  const [refreshing, setRefreshing] = useState(false)
+
+  const listKey = Object.keys(shoppingList).sort().join(',')
+
+  useEffect(() => {
+    const items = Object.values(shoppingList)
+    if (!items.length) return
+    const controller = new AbortController()
+
+    // Primero el catálogo, que pinta al instante; luego Jumbo en vivo.
+    getPricesForIds(items.map(i => i.productId))
+      .then(cached => setLivePrices(prev => ({ ...cached, ...prev })))
+      .catch(() => {})
+
+    setRefreshing(true)
+    refreshListPrices(items, {
+      signal: controller.signal,
+      onUpdate: (id, product) => setLivePrices(prev => ({ ...prev, [id]: product })),
     })
+      .catch(() => {})
+      .finally(() => setRefreshing(false))
+
+    return () => controller.abort()
+  }, [listKey]) // eslint-disable-line
+
+  const priceOf = item =>
+    livePrices[item.productId] ?? getProductById(item.productId) ?? null
+
+  const grouped = useMemo(() => {
+    const items = Object.values(shoppingList).map(item => ({
+      ...item,
+      current: livePrices[item.productId] ?? getProductById(item.productId),
+    }))
 
     const groups = {}
     items.forEach(item => {
@@ -35,17 +69,14 @@ export default function ShoppingList() {
       groups[cat].push(item)
     })
     return groups
-  }, [shoppingList])
+  }, [shoppingList, livePrices])
 
   const totalItems = Object.keys(shoppingList).length
-  const totalOnSale = Object.values(shoppingList).filter(item => {
-    const p = getProductById(item.productId)
-    return p && p.isOnSale
-  }).length
+  const totalOnSale = Object.values(shoppingList).filter(item => priceOf(item)?.isOnSale).length
 
   const estimatedTotal = Object.values(shoppingList).reduce((sum, item) => {
-    const p = getProductById(item.productId)
-    return sum + (p ? p.currentPrice : item.priceWhenAdded)
+    const p = priceOf(item)
+    return sum + (p?.currentPrice ?? item.priceWhenAdded)
   }, 0)
 
   if (totalItems === 0) {
@@ -85,6 +116,9 @@ export default function ShoppingList() {
             {totalItems} {totalItems === 1 ? 'producto' : 'productos'}
             {totalOnSale > 0 && (
               <span className="text-orange-400"> · {totalOnSale} en oferta 🎉</span>
+            )}
+            {refreshing && (
+              <span className="text-gray-500"> · actualizando precios…</span>
             )}
           </p>
         </div>
