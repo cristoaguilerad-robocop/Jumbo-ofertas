@@ -3,6 +3,10 @@ import { fetchCategories, fetchCategory } from './jumboApi'
 import { excludedBy, isPromoLanding, prettifySlug } from './catalogFilters'
 
 const UPSERT_BATCH = 400
+// Los ids de un UPDATE viajan en el filtro `id=in.(...)` de la URL, no en el
+// cuerpo. Con 400 ids la URL ronda los 6.5 KB y queda a merced del límite de
+// cabecera del proxy (4-8 KB según configuración); con 100 baja a ~1.7 KB.
+const UPDATE_ID_BATCH = 100
 const THROTTLE_MS = 60
 // Cuántas categorías se recorren a la vez. El tiempo se va casi todo esperando
 // la red, así que varias en paralelo multiplican el rendimiento sin castigar a
@@ -164,9 +168,9 @@ async function relabelProducts(fixes, signal) {
       category_top: prettifySlug(segments[0]),
       category_path: path,
     }
-    for (let i = 0; i < ids.length; i += UPSERT_BATCH) {
+    for (let i = 0; i < ids.length; i += UPDATE_ID_BATCH) {
       if (signal?.aborted) return updated
-      const chunk = ids.slice(i, i + UPSERT_BATCH)
+      const chunk = ids.slice(i, i + UPDATE_ID_BATCH)
       const { error } = await supabase.from('products').update(patch).in('id', chunk)
       if (error) throw new Error(`Supabase: ${error.message}`)
       updated += chunk.length
