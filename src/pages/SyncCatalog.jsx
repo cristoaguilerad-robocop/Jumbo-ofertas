@@ -292,20 +292,15 @@ export default function SyncCatalog() {
               Catálogo sincronizado: {(progress.uniqueProducts || 0).toLocaleString('es-CL')} productos distintos.
               {progress.relabelError && (
                 <span className="block text-orange-400 text-xs mt-1">
-                  No se pudieron corregir {progress.pendingFixes?.toLocaleString('es-CL')} categorías:
+                  No se pudieron escribir las categorías de
+                  {' '}{progress.pendingFixes?.toLocaleString('es-CL')} productos:
                   {' '}{progress.relabelError}
-                </span>
-              )}
-              {!progress.relabelError && progress.pendingFixes === 0 && (
-                <span className="block text-gray-400 text-xs mt-1">
-                  Ninguna categoría necesitó corrección: cada producto ya quedó guardado bajo
-                  la mejor ruta disponible.
                 </span>
               )}
               {progress.relabeled > 0 && (
                 <span className="block text-gray-400 text-xs mt-1">
-                  Se corrigió la categoría de {progress.relabeled.toLocaleString('es-CL')} productos
-                  que habían quedado etiquetados por la promoción en que aparecían.
+                  Se fijó la categoría de {progress.relabeled.toLocaleString('es-CL')} productos
+                  según la mejor ruta encontrada para cada uno.
                 </span>
               )}
               {progress.promoOnly > 0 && (

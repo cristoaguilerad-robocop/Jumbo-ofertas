@@ -138,28 +138,40 @@ async function upsertProducts(products, categoryPath) {
 }
 
 /**
- * Reescribe solo las columnas de categoría de los productos mal etiquetados.
+ * Reescribe las columnas de categoría de los productos indicados.
  *
- * No toca precios ni nombres: son los mismos que ya se guardaron, y volver a
- * enviarlos solo agregaría peso y riesgo de pisar un dato más fresco.
+ * Usa UPDATE, no upsert. El upsert de PostgREST es
+ * `INSERT ... ON CONFLICT DO UPDATE`, y Postgres valida la tupla del INSERT
+ * antes de resolver el conflicto: al enviar solo las columnas de categoría,
+ * `name` viajaba nulo y el lote completo fallaba contra su NOT NULL. La
+ * corrección nunca llegó a aplicarse.
+ *
+ * Los productos se agrupan por ruta, así cada ruta se resuelve con un solo
+ * UPDATE ... WHERE id IN (...) en vez de una petición por producto.
  */
 async function relabelProducts(fixes, signal) {
+  const byPath = new Map()
+  for (const { id, path } of fixes) {
+    if (!byPath.has(path)) byPath.set(path, [])
+    byPath.get(path).push(id)
+  }
+
   let updated = 0
-  for (let i = 0; i < fixes.length; i += UPSERT_BATCH) {
-    if (signal?.aborted) break
-    const batch = fixes.slice(i, i + UPSERT_BATCH).map(({ id, path }) => {
-      const segments = path.split('/')
-      return {
-        id,
-        category: prettifySlug(segments[segments.length - 1]),
-        category_top: prettifySlug(segments[0]),
-        category_path: path,
-      }
-    })
-    const { error } = await supabase.from('products').upsert(batch, { onConflict: 'id' })
-    if (error) throw new Error(`Supabase: ${error.message}`)
-    updated += batch.length
-    await sleep(THROTTLE_MS)
+  for (const [path, ids] of byPath) {
+    const segments = path.split('/')
+    const patch = {
+      category: prettifySlug(segments[segments.length - 1]),
+      category_top: prettifySlug(segments[0]),
+      category_path: path,
+    }
+    for (let i = 0; i < ids.length; i += UPSERT_BATCH) {
+      if (signal?.aborted) return updated
+      const chunk = ids.slice(i, i + UPSERT_BATCH)
+      const { error } = await supabase.from('products').update(patch).in('id', chunk)
+      if (error) throw new Error(`Supabase: ${error.message}`)
+      updated += chunk.length
+      await sleep(THROTTLE_MS)
+    }
   }
   return updated
 }
@@ -249,10 +261,10 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
   // contar escrituras exagera el catálogo: 31.000 escrituras eran 17.500
   // productos. Se lleva aparte el conteo de ids distintos, que es el real.
   const uniqueIds = new Set()
-  // Mejor ruta vista por producto, y la que efectivamente quedó escrita. La
-  // diferencia entre ambas es lo que hay que corregir al final.
+  // Mejor ruta vista por producto. Al terminar se reescribe la categoría de
+  // todos desde este mapa, que es la única fuente fiable: el orden en que las
+  // escrituras llegaron a Postgres no lo puede saber este proceso.
   const bestPath = new Map()
-  const writtenPath = new Map()
   let totalSaved = saved?.totalSaved || 0
   let failed = saved?.failed || 0
   let lastError = null
@@ -318,7 +330,6 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
       for (const p of fresh) {
         uniqueIds.add(p.id)
         bestPath.set(p.id, betterPath(bestPath.get(p.id), categoryPath))
-        writtenPath.set(p.id, categoryPath)
       }
       report(snapshot({ currentCategory: [...active][0], currentPage: page }))
 
@@ -379,10 +390,15 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
   const completeRun = restart && !outOfTime && done.size === categories.length
   if (completeRun) {
     report(snapshot({ phase: 'relabeling' }))
+    // Se reescriben TODOS los productos, no solo aquellos cuya etiqueta parecía
+    // incorrecta. Comparar contra lo que este proceso *cree* haber escrito no
+    // era fiable: la app informó 961 productos bajo una vitrina mientras la
+    // tabla tenía 4.469. Afirmar el estado deseado no depende de acertar ese
+    // diagnóstico.
     const fixes = []
     for (const [id, best] of bestPath) {
       if (isPromoLanding(best)) promoOnly += 1
-      if (writtenPath.get(id) !== best) fixes.push({ id, path: best })
+      fixes.push({ id, path: best })
     }
     pendingFixes = fixes.length
     // Sin esto, un fallo de Supabase se reportaba como «0 corregidos», idéntico
