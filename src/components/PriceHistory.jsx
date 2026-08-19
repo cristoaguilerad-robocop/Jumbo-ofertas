@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { formatPrice } from '../data/mockProducts'
+import { formatPrice } from '../data/catalog'
 
 const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { CATEGORIES } from '../data/mockProducts'
+import { CATEGORIES } from '../data/catalog'
 import { useProducts, useCategories, searchByBarcode, suggestForBarcode } from '../hooks/useProducts'
 import ProductCard from '../components/ProductCard'
 import BarcodeScanner from '../components/BarcodeScanner'
@@ -62,12 +62,25 @@ export default function Search() {
     setQuery('')
     setSuggestion({ loading: true })
     const found = await suggestForBarcode(barcode)
+
+    // Un único resultado al buscar los 13 dígitos en Jumbo es coincidencia
+    // real, no difusa: se vincula solo. Escanear existe para ahorrar pasos.
+    if (found.exact && found.candidates.length === 1) {
+      await handleLinkProduct(found.candidates[0], barcode)
+      return
+    }
+
     setSuggestion({ loading: false, ...found })
+    // Deja el buscador cargado con el nombre que se logró deducir, para que la
+    // lista de resultados aparezca sola. Antes había que teclearlo a mano, que
+    // es exactamente lo que el escaneo venía a evitar.
+    if (found.prefill) setQuery(found.prefill)
   }
 
-  async function handleLinkProduct(product) {
+  async function handleLinkProduct(product, barcode = pendingBarcode) {
+    if (!barcode) return
     try {
-      const linked = await linkBarcode(product, pendingBarcode)
+      const linked = await linkBarcode(product, barcode)
       await addToList(linked)
       setPendingBarcode(null)
       setSuggestion(null)
@@ -170,7 +183,7 @@ export default function Search() {
         {scanned && (
           <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 flex items-center gap-3">
             {scanned.imageUrl && (
-              <img src={scanned.imageUrl} alt="" className="w-10 h-10 rounded-lg object-contain bg-white p-0.5 shrink-0" />
+              <img src={scanned.imageUrl} alt="" className="w-14 h-14 rounded-xl object-contain bg-white p-1 shrink-0" />
             )}
             <div className="flex-1 min-w-0">
               <p className="text-green-400 text-sm font-medium">Agregado a tu lista</p>
@@ -210,10 +223,17 @@ export default function Search() {
               </p>
             )}
 
+            {suggestion && !suggestion.loading && !suggestion.hint && !suggestion.candidates?.length && (
+              <p className="text-xs text-gray-400">
+                No se pudo identificar este código automáticamente. Es normal en
+                productos chilenos: las bases abiertas de códigos no los cubren.
+              </p>
+            )}
+
             <p className="text-xs text-gray-400">
               {suggestion?.candidates?.length
                 ? 'Toca el producto correcto para vincularlo. La próxima vez se reconocerá solo.'
-                : 'Busca el producto por su nombre y tócalo para vincularlo. La próxima vez se reconocerá solo.'}
+                : 'Busca el producto arriba y tócalo para vincularlo. Solo hay que hacerlo una vez: después el escaneo lo reconoce solo.'}
             </p>
 
             {suggestion?.candidates?.length > 0 && (
@@ -225,10 +245,10 @@ export default function Search() {
                     className="w-full bg-gray-800 hover:bg-gray-700 rounded-xl p-2.5 flex items-center gap-2.5 text-left transition-colors"
                   >
                     {c.imageUrl && (
-                      <img src={c.imageUrl} alt="" className="w-9 h-9 rounded-lg object-contain bg-white p-0.5 shrink-0" />
+                      <img src={c.imageUrl} alt="" className="w-14 h-14 rounded-xl object-contain bg-white p-1 shrink-0" />
                     )}
                     <span className="flex-1 min-w-0">
-                      <span className="block text-white text-xs leading-tight line-clamp-2">{c.name}</span>
+                      <span className="block text-white text-sm leading-snug line-clamp-2">{c.name}</span>
                       <span className="block text-gray-400 text-[11px] mt-0.5">
                         ${c.currentPrice?.toLocaleString('es-CL')}
                       </span>
@@ -285,7 +305,7 @@ export default function Search() {
               <ProductCard
                 key={product.id}
                 product={product}
-                onSelect={pendingBarcode ? handleLinkProduct : undefined}
+                onSelect={pendingBarcode ? (p => handleLinkProduct(p)) : undefined}
               />
             ))}
 

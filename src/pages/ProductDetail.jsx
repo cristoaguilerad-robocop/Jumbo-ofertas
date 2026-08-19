@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { getProductById, formatPrice } from '../data/mockProducts'
+import { formatPrice } from '../data/catalog'
 import { useApp } from '../context/AppContext'
 import { getCatalogProduct, getPriceHistory, recordPrices } from '../lib/catalogDb'
 import PriceHistory from '../components/PriceHistory'
@@ -18,14 +18,14 @@ export default function ProductDetail() {
   const location = useLocation()
   const { addToList, removeFromList, isInList, setTargetPrice, shoppingList } = useApp()
 
-  // Producto desde el estado de navegación (resultado en vivo de Jumbo), del
-  // catálogo indexado si se recargó la página, o del mock como último recurso.
+  // Producto desde el estado de navegación (resultado en vivo de Jumbo) o del
+  // catálogo indexado si se recargó la página.
   const [fetched, setFetched] = useState(null)
   const [lookingUp, setLookingUp] = useState(false)
-  const product = location.state?.product || fetched || getProductById(id)
+  const product = location.state?.product || fetched
 
   useEffect(() => {
-    if (location.state?.product || getProductById(id)) return
+    if (location.state?.product) return
     setLookingUp(true)
     getCatalogProduct(id)
       .then(setFetched)
@@ -111,9 +111,9 @@ export default function ProductDetail() {
         {/* Hero */}
         <div className="bg-gray-800 rounded-2xl p-6 text-center">
           {product.imageUrl ? (
-            <img src={product.imageUrl} alt={product.name} className="w-24 h-24 object-contain mx-auto mb-4 rounded-xl" />
+            <img src={product.imageUrl} alt={product.name} className="w-40 h-40 object-contain mx-auto mb-4 rounded-2xl bg-white p-2" />
           ) : (
-            <div className={`w-20 h-20 mx-auto rounded-2xl flex items-center justify-center text-4xl mb-4 ${product.isOnSale ? 'bg-orange-500/10' : 'bg-gray-700'}`}>
+            <div className={`w-32 h-32 mx-auto rounded-2xl flex items-center justify-center text-5xl mb-4 ${product.isOnSale ? 'bg-orange-500/10' : 'bg-gray-700'}`}>
               {CATEGORY_EMOJIS[product.category] || '🛒'}
             </div>
           )}

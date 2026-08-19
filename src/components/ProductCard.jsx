@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
-import { formatPrice } from '../data/mockProducts'
+import { formatPrice } from '../data/catalog'
 import OfferBadge from './OfferBadge'
 
 const CATEGORY_EMOJIS = {
@@ -37,11 +37,17 @@ export default function ProductCard({ product, showAddButton = true, onSelect })
         ? onSelect(product)
         : navigate(`/product/${product.id}`, { state: { product } })}
     >
-      {/* Icon / Image */}
+      {/* Imagen del producto. A 48px no se distinguía un envase de otro, que es
+          justo lo que uno necesita para reconocerlo de un vistazo. */}
       {product.imageUrl ? (
-        <img src={product.imageUrl} alt={product.name} className="w-12 h-12 rounded-xl object-contain shrink-0 bg-white p-1" />
+        <img
+          src={product.imageUrl}
+          alt={product.name}
+          loading="lazy"
+          className="w-20 h-20 rounded-xl object-contain shrink-0 bg-white p-1"
+        />
       ) : (
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0 ${
+        <div className={`w-20 h-20 rounded-xl flex items-center justify-center text-3xl shrink-0 ${
           product.isOnSale ? 'bg-orange-500/10' : 'bg-gray-700'
         }`}>
           {CATEGORY_EMOJIS[product.category] || '🛒'}
@@ -50,7 +56,7 @@ export default function ProductCard({ product, showAddButton = true, onSelect })
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <p className="text-white text-sm font-medium leading-tight line-clamp-2">
+        <p className="text-white text-sm font-medium leading-snug line-clamp-2">
           {product.name}
         </p>
         <p className="text-gray-400 text-xs mt-0.5">{product.category}</p>

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getOnSaleProducts } from '../data/mockProducts'
 import { useApp } from '../context/AppContext'
 import { useNotifications } from '../hooks/useNotifications'
 import { getOffers } from '../lib/catalogDb'
@@ -8,18 +7,16 @@ import { countCatalog } from '../lib/catalogSync'
 import ProductCard from '../components/ProductCard'
 import Logo from '../components/Logo'
 
-const mockOffers = getOnSaleProducts().slice(0, 6)
-
 export default function Home() {
   const navigate = useNavigate()
   const { shoppingList } = useApp()
   const { requestPermission, checkPriceDrops } = useNotifications()
-  const [offerProducts, setOfferProducts] = useState(mockOffers)
+  const [offerProducts, setOfferProducts] = useState(null)
   const [catalogCount, setCatalogCount] = useState(null)
 
   useEffect(() => {
     countCatalog().then(setCatalogCount)
-    getOffers(6).then(offers => { if (offers?.length) setOfferProducts(offers) })
+    getOffers(6).then(offers => setOfferProducts(offers || [])).catch(() => setOfferProducts([]))
   }, [])
 
   useEffect(() => {
@@ -32,10 +29,9 @@ export default function Home() {
   }, [shoppingList]) // eslint-disable-line
 
   const listCount = Object.keys(shoppingList).length
-  const listOfferCount = Object.values(shoppingList).filter(item => {
-    const p = offerProducts.find(op => op.id === item.productId)
-    return !!p
-  }).length
+  const listOfferCount = Object.values(shoppingList).filter(
+    item => offerProducts?.some(op => op.id === item.productId)
+  ).length
 
   return (
     <div className="min-h-screen bg-gray-950 pb-nav">
@@ -137,9 +133,25 @@ export default function Home() {
             </button>
           </div>
           <div className="space-y-2">
-            {offerProducts.map(product => (
-              <ProductCard key={product.id} product={product} />
-            ))}
+            {offerProducts === null ? (
+              <div className="bg-gray-800 rounded-2xl p-6 flex justify-center">
+                <div className="w-5 h-5 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : offerProducts.length === 0 ? (
+              <button
+                onClick={() => navigate('/sync')}
+                className="w-full bg-gray-800 rounded-2xl p-5 text-left"
+              >
+                <p className="text-gray-300 text-sm">Todavía no hay ofertas que mostrar.</p>
+                <p className="text-gray-500 text-xs mt-1">
+                  Descarga el catálogo de Jumbo para ver las ofertas reales del día.
+                </p>
+              </button>
+            ) : (
+              offerProducts.map(product => (
+                <ProductCard key={product.id} product={product} />
+              ))
+            )}
           </div>
         </div>
       </div>

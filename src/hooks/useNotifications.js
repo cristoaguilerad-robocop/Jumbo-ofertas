@@ -1,5 +1,4 @@
 import { useCallback } from 'react'
-import { mockProducts } from '../data/mockProducts'
 import { getPricesForIds } from '../lib/catalogDb'
 import { refreshListPrices } from '../lib/priceRefresh'
 
@@ -22,13 +21,6 @@ async function resolveCurrentPrices(items) {
   const fresh = await refreshListPrices(items).catch(() => ({}))
   for (const [id, product] of Object.entries(fresh)) {
     prices[id] = { currentPrice: product.currentPrice, isOnSale: product.isOnSale }
-  }
-
-  // Los productos mock no viven en Supabase ni en Jumbo.
-  for (const id of ids) {
-    if (prices[id]) continue
-    const mock = mockProducts.find(p => p.id === id)
-    if (mock) prices[id] = { currentPrice: mock.currentPrice, isOnSale: mock.isOnSale }
   }
 
   return prices

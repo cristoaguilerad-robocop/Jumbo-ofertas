@@ -1,15 +1,16 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
-import { searchProducts, getProductsByCategory, getProductByBarcode } from '../data/mockProducts'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { fetchSearch, fetchByBarcode, lookupBarcode } from '../lib/jumboApi'
 import { searchCatalog, getCatalogByBarcode, getCatalogCategories } from '../lib/catalogDb'
 
 const PAGE_SIZE = 24
 
 /**
- * Tres fuentes en orden de preferencia:
+ * Dos fuentes en orden de preferencia:
  *   1. catálogo indexado en Supabase — instantáneo y completo (requiere sync)
  *   2. jumbo.cl en vivo — se parsea su página de búsqueda vía proxy
- *   3. catálogo mock local — último recurso
+ *
+ * Si ninguna responde, la búsqueda queda vacía. Antes caía a un catálogo
+ * ficticio de desarrollo, que mostraba productos y precios que no existen.
  */
 export function useProducts() {
   const [query, setQuery] = useState('')
@@ -123,13 +124,7 @@ export function useProducts() {
     }
   }, [hasMore, loadingMore, source, trimmed, category, onlyOffers])
 
-  const mockResults = useMemo(() => {
-    let items = trimmed ? searchProducts(trimmed) : getProductsByCategory(category)
-    if (trimmed && category !== 'Todos') items = items.filter(p => p.category === category)
-    return onlyOffers ? items.filter(p => p.isOnSale) : items
-  }, [trimmed, category, onlyOffers])
-
-  const results = remoteResults !== null ? remoteResults : mockResults
+  const results = remoteResults ?? []
 
   return {
     query, setQuery,
@@ -144,7 +139,7 @@ export function useProducts() {
   }
 }
 
-/** Categorías reales del catálogo indexado, con fallback a las del mock. */
+/** Categorías reales del catálogo indexado, con fallback a la lista base. */
 export function useCategories(fallback) {
   const [categories, setCategories] = useState(fallback)
   useEffect(() => {
@@ -156,66 +151,129 @@ export function useCategories(fallback) {
 }
 
 /**
- * Resuelve un código de barras a un producto de Jumbo.
+ * Variantes de un código de barras.
  *
- * Jumbo no publica el EAN, así que hay que reconstruir el vínculo:
- *   1. códigos ya vinculados a mano, que son los confiables
- *   2. el buscador de Jumbo, por si indexa el código
- *   3. Open Food Facts, que sí mapea EAN a nombre y marca; con eso se busca
- *      el producto por nombre en el catálogo y en Jumbo
- *
- * Devuelve el producto, o un objeto con la pista de Open Food Facts para que
- * la pantalla pueda proponer candidatos en vez de rendirse.
+ * El mismo producto se imprime como UPC-A de 12 dígitos o como EAN-13 con un
+ * cero delante, y quien lo indexó pudo guardar cualquiera de las dos. Probar
+ * ambas evita perder coincidencias reales por un cero.
  */
-export async function searchByBarcode(barcode) {
-  const indexed = await getCatalogByBarcode(barcode).catch(() => null)
-  if (indexed) return indexed
-
-  // Un único resultado indica coincidencia real; varios son coincidencia
-  // difusa sobre los dígitos, y un producto equivocado es peor que ninguno.
-  try {
-    const live = await fetchByBarcode(barcode)
-    if (live.length === 1) return live[0]
-  } catch { /* sigue */ }
-
-  const mock = getProductByBarcode(barcode)
-  if (mock) return mock
-
-  return null
+function barcodeVariants(barcode) {
+  const digits = String(barcode).replace(/\D/g, '')
+  const variants = new Set([digits])
+  if (digits.length === 13 && digits.startsWith('0')) variants.add(digits.slice(1))
+  if (digits.length === 12) variants.add(`0${digits}`)
+  return [...variants]
 }
 
 /**
- * Candidatos para un código que no se pudo resolver, usando el nombre que
- * Open Food Facts asocia al EAN.
+ * Resuelve un código de barras a un producto ya vinculado.
+ *
+ * Jumbo no publica el EAN en ninguna parte de su payload, así que el vínculo
+ * hay que construirlo: la primera vez se elige el producto a mano y queda
+ * guardado en la columna `barcode`; a partir de ahí el escaneo lo resuelve
+ * solo. Solo se acepta aquí lo que es seguro; lo demás pasa por
+ * `suggestForBarcode`, que propone candidatos en vez de adivinar.
+ */
+export async function searchByBarcode(barcode) {
+  for (const variant of barcodeVariants(barcode)) {
+    const indexed = await getCatalogByBarcode(variant).catch(() => null)
+    if (indexed) return indexed
+  }
+  return null
+}
+
+/** Une listas de productos sin repetir ids, respetando el orden de llegada. */
+function mergeCandidates(...lists) {
+  const seen = new Set()
+  const out = []
+  for (const list of lists) {
+    for (const product of list || []) {
+      if (!product?.id || seen.has(product.id)) continue
+      seen.add(product.id)
+      out.push(product)
+    }
+  }
+  return out
+}
+
+/** Palabras que no sirven para buscar: aparecen en demasiados productos. */
+const STOPWORDS = new Set(['de', 'la', 'el', 'con', 'sin', 'y', 'en', 'para', 'gr', 'g', 'ml', 'kg', 'lt', 'l', 'un', 'pack'])
+
+function searchTerms(hint) {
+  if (!hint) return []
+  const words = `${hint.brand || ''} ${hint.name || ''}`
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !STOPWORDS.has(w))
+
+  const terms = []
+  if (words.length) terms.push(words.join(' '))
+  // El nombre completo de Open Food Facts suele ser más largo y específico que
+  // el de Jumbo, así que también se prueban las dos primeras palabras y la
+  // marca sola: son las que tienen chance real de coincidir.
+  if (words.length > 2) terms.push(words.slice(0, 2).join(' '))
+  if (hint.brand) terms.push(hint.brand.toLowerCase())
+  return [...new Set(terms)]
+}
+
+/**
+ * Candidatos para un código que no se pudo resolver.
+ *
+ * Antes esto dependía por completo de que Open Food Facts conociera el EAN: si
+ * no lo conocía, devolvía cero candidatos y no quedaba más que teclear el
+ * nombre a mano, que es justo lo que el escaneo venía a evitar. Ahora se
+ * prueban varias vías y se devuelve además un término para dejar precargado el
+ * buscador, de modo que la pantalla nunca quede en blanco.
  */
 export async function suggestForBarcode(barcode) {
+  const variants = barcodeVariants(barcode)
+
+  // 1. El buscador de Jumbo, con los dígitos tal cual. A veces el código sí
+  //    aparece en la ficha; cuando pasa, es la coincidencia más confiable.
+  let byDigits = []
+  for (const variant of variants) {
+    try {
+      const found = await fetchByBarcode(variant)
+      // Un puñado de resultados sobre una cadena de 13 dígitos es coincidencia
+      // real; decenas es el buscador ignorando el código y devolviendo relleno.
+      if (found.length && found.length <= 5) { byDigits = found; break }
+    } catch { /* se sigue con las otras vías */ }
+  }
+
+  // Un solo resultado para una cadena de 13 dígitos no es coincidencia difusa:
+  // el buscador encontró ese código. Se devuelve como exacto para que la
+  // pantalla lo vincule sola, sin pedir confirmación ni consultar más fuentes.
+  if (byDigits.length === 1) {
+    return { hint: null, candidates: byDigits, prefill: '', exact: true }
+  }
+
+  // 2. Open Food Facts mapea EAN a nombre y marca; con eso se busca por nombre.
   let hint = null
   try {
-    const off = await lookupBarcode(barcode)
-    if (off?.found) hint = off
+    for (const variant of variants) {
+      const off = await lookupBarcode(variant)
+      if (off?.found) { hint = off; break }
+    }
   } catch { /* sin pista */ }
 
-  if (!hint) return { hint: null, candidates: [] }
-
-  const terms = [hint.brand, hint.name].filter(Boolean).join(' ').trim()
-  let candidates = []
-
-  try {
-    candidates = (await searchCatalog({ query: terms, limit: 8 })) || []
-  } catch { /* sigue al vivo */ }
-
-  if (!candidates.length) {
+  const byName = []
+  for (const term of searchTerms(hint)) {
+    if (byName.length >= 8) break
     try {
-      candidates = await fetchSearch(terms, 1)
-    } catch { /* sin candidatos */ }
+      const fromCatalog = await searchCatalog({ query: term, limit: 8 })
+      if (fromCatalog?.length) { byName.push(...fromCatalog); continue }
+    } catch { /* sigue al vivo */ }
+    try {
+      byName.push(...(await fetchSearch(term, 1)).slice(0, 8))
+    } catch { /* este término no dio nada */ }
   }
 
-  // Si el nombre completo no rinde, se reintenta solo con la marca.
-  if (!candidates.length && hint.brand) {
-    try {
-      candidates = (await searchCatalog({ query: hint.brand, limit: 8 })) || []
-    } catch { /* nada más que probar */ }
-  }
+  const candidates = mergeCandidates(byDigits, byName).slice(0, 8)
 
-  return { hint, candidates: candidates.slice(0, 8) }
+  // Con qué dejar precargado el buscador si ninguna vía acertó: el nombre que
+  // conoce Open Food Facts, o nada, pero nunca el código, que no busca nada.
+  const prefill = searchTerms(hint)[0] || ''
+
+  return { hint, candidates, prefill, exact: false }
 }
