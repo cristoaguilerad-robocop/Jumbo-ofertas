@@ -38,7 +38,7 @@ export default function Home() {
   }).length
 
   return (
-    <div className="min-h-screen bg-gray-950 pb-24">
+    <div className="min-h-screen bg-gray-950 pb-nav">
       {/* Header */}
       <div className="bg-gray-900 px-4 pt-safe pt-6 pb-6">
         <div className="max-w-lg mx-auto">

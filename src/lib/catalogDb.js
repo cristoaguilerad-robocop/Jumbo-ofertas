@@ -110,11 +110,25 @@ export async function getOffers(limit = 20) {
   return data.map(fromRow)
 }
 
-/** Precios actuales para los ids dados, desde el catálogo indexado. */
+/**
+ * Precios del catálogo para los ids dados.
+ *
+ * Devuelve la forma completa del producto —incluidos regularPrice y
+ * discountPercent— porque la lista los usa para mostrar el precio tachado y el
+ * porcentaje; con solo el precio actual la insignia de oferta salía vacía.
+ */
 export async function getPricesForIds(ids) {
   if (!isConfigured || !ids.length) return {}
   const { data, error } = await supabase
-    .from('products').select('id, current_price, is_on_sale').in('id', ids)
+    .from('products')
+    .select('id, current_price, regular_price, is_on_sale, discount_percent')
+    .in('id', ids)
   if (error || !data) return {}
-  return Object.fromEntries(data.map(r => [r.id, { currentPrice: r.current_price, isOnSale: r.is_on_sale }]))
+  return Object.fromEntries(data.map(r => [r.id, {
+    id: r.id,
+    currentPrice: r.current_price,
+    regularPrice: r.regular_price,
+    isOnSale: r.is_on_sale,
+    discountPercent: r.discount_percent || 0,
+  }]))
 }
