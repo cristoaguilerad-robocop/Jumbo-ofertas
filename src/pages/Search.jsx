@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { CATEGORIES } from '../data/mockProducts'
-import { useProducts, useCategories, searchByBarcode } from '../hooks/useProducts'
+import { useProducts, useCategories, searchByBarcode, suggestForBarcode } from '../hooks/useProducts'
 import ProductCard from '../components/ProductCard'
 import BarcodeScanner from '../components/BarcodeScanner'
 import EmptyState from '../components/EmptyState'
@@ -20,6 +20,9 @@ export default function Search() {
   const [pendingBarcode, setPendingBarcode] = useState(null)
   const [linkError, setLinkError] = useState(null)
   const [scanned, setScanned] = useState(null)
+  // Pista de Open Food Facts y candidatos del catálogo para un código
+  // desconocido, para no dejar al usuario tecleando el nombre a ciegas.
+  const [suggestion, setSuggestion] = useState(null)
   const { addToList } = useApp()
 
   const {
@@ -53,9 +56,13 @@ export default function Search() {
       return
     }
     // Jumbo no publica el EAN, así que un código desconocido se resuelve
-    // pidiéndole al usuario que lo vincule una vez.
+    // pidiéndole al usuario que lo vincule una vez. Open Food Facts sí conoce
+    // el EAN, y su nombre sirve para proponer candidatos del catálogo.
     setPendingBarcode(barcode)
     setQuery('')
+    setSuggestion({ loading: true })
+    const found = await suggestForBarcode(barcode)
+    setSuggestion({ loading: false, ...found })
   }
 
   async function handleLinkProduct(product) {
@@ -63,6 +70,7 @@ export default function Search() {
       const linked = await linkBarcode(product, pendingBarcode)
       await addToList(linked)
       setPendingBarcode(null)
+      setSuggestion(null)
       setQuery('')
       setScanned(linked)
     } catch (err) {
@@ -188,12 +196,49 @@ export default function Search() {
             <p className="text-sm text-green-400">
               Código <span className="font-mono">{pendingBarcode}</span> sin registrar.
             </p>
+            {suggestion?.loading && (
+              <p className="text-xs text-gray-400">Identificando el código…</p>
+            )}
+
+            {suggestion && !suggestion.loading && suggestion.hint && (
+              <p className="text-xs text-gray-300">
+                Parece ser <span className="text-white font-medium">
+                  {[suggestion.hint.brand, suggestion.hint.name, suggestion.hint.quantity]
+                    .filter(Boolean).join(' ')}
+                </span>
+                <span className="text-gray-500"> · según Open Food Facts</span>
+              </p>
+            )}
+
             <p className="text-xs text-gray-400">
-              Busca el producto por su nombre y tócalo para vincularlo. La próxima vez que lo
-              escanees se reconocerá solo.
+              {suggestion?.candidates?.length
+                ? 'Toca el producto correcto para vincularlo. La próxima vez se reconocerá solo.'
+                : 'Busca el producto por su nombre y tócalo para vincularlo. La próxima vez se reconocerá solo.'}
             </p>
+
+            {suggestion?.candidates?.length > 0 && (
+              <div className="space-y-1.5 pt-1">
+                {suggestion.candidates.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => handleLinkProduct(c)}
+                    className="w-full bg-gray-800 hover:bg-gray-700 rounded-xl p-2.5 flex items-center gap-2.5 text-left transition-colors"
+                  >
+                    {c.imageUrl && (
+                      <img src={c.imageUrl} alt="" className="w-9 h-9 rounded-lg object-contain bg-white p-0.5 shrink-0" />
+                    )}
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-white text-xs leading-tight line-clamp-2">{c.name}</span>
+                      <span className="block text-gray-400 text-[11px] mt-0.5">
+                        ${c.currentPrice?.toLocaleString('es-CL')}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
             <button
-              onClick={() => { setPendingBarcode(null); setLinkError(null) }}
+              onClick={() => { setPendingBarcode(null); setLinkError(null); setSuggestion(null) }}
               className="text-xs text-gray-400 underline"
             >
               Cancelar vinculación
