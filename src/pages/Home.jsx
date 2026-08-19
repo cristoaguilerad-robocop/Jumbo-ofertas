@@ -40,7 +40,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-950 pb-nav">
       {/* Header */}
-      <div className="bg-gray-900 px-4 pt-safe pt-6 pb-6">
+      <div className="bg-gray-900 px-4 pt-header pb-6">
         <div className="max-w-lg mx-auto">
           <div className="flex items-center gap-2.5 mb-1">
             <Logo className="w-9 h-9 shrink-0" />

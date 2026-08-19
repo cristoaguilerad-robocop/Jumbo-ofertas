@@ -88,7 +88,7 @@ export default function Search() {
       )}
 
       {/* Header */}
-      <div className="bg-gray-900 px-4 pt-safe pt-6 pb-4 sticky top-0 z-40">
+      <div className="bg-gray-900 px-4 pt-header pb-4 sticky top-0 z-40">
         <div className="max-w-lg mx-auto space-y-3">
           <div className="flex gap-2">
             <div className="flex-1 relative">

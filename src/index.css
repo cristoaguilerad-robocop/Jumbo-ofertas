@@ -13,6 +13,16 @@
   .pt-safe {
     padding-top: env(safe-area-inset-top, 0px);
   }
+  /* Cabeceras: el área segura SUMA al espaciado, no compite con él.
+     Combinar `pt-safe pt-6` no funcionaba porque ambas definen padding-top y
+     solo una ganaba, así que en pantallas con notch el contenido quedaba
+     debajo de la barra de estado. */
+  .pt-header {
+    padding-top: calc(1.5rem + env(safe-area-inset-top, 0px));
+  }
+  .pt-header-sm {
+    padding-top: calc(1rem + env(safe-area-inset-top, 0px));
+  }
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }

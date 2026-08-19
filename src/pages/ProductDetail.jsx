@@ -87,7 +87,7 @@ export default function ProductDetail() {
 
   return (
     <div className="min-h-screen bg-gray-950 pb-nav">
-      <div className="bg-gray-900 px-4 pt-safe pt-4 pb-4">
+      <div className="bg-gray-900 px-4 pt-header-sm pb-4">
         <div className="max-w-lg mx-auto">
           <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-gray-400 text-sm">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
