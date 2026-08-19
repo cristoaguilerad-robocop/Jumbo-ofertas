@@ -6,6 +6,7 @@ import ProductCard from '../components/ProductCard'
 import BarcodeScanner from '../components/BarcodeScanner'
 import EmptyState from '../components/EmptyState'
 import { linkBarcode } from '../lib/catalogDb'
+import { useApp } from '../context/AppContext'
 
 export default function Search() {
   const [searchParams] = useSearchParams()
@@ -18,6 +19,8 @@ export default function Search() {
   // usuario elija a qué producto corresponde.
   const [pendingBarcode, setPendingBarcode] = useState(null)
   const [linkError, setLinkError] = useState(null)
+  const [scanned, setScanned] = useState(null)
+  const { addToList } = useApp()
 
   const {
     query, setQuery, category, setCategory, onlyOffers, setOnlyOffers,
@@ -38,11 +41,15 @@ export default function Search() {
     setShowScanner(false)
     setScanError(null)
     setLinkError(null)
+    setScanned(null)
     setScanLoading(true)
     const product = await searchByBarcode(barcode)
     setScanLoading(false)
     if (product) {
-      navigate(`/product/${product.id}`, { state: { product } })
+      // Escanear es para agregar rápido: se suma a la lista de inmediato y se
+      // confirma en pantalla, en vez de obligar a un paso más.
+      await addToList(product)
+      setScanned(product)
       return
     }
     // Jumbo no publica el EAN, así que un código desconocido se resuelve
@@ -54,8 +61,10 @@ export default function Search() {
   async function handleLinkProduct(product) {
     try {
       const linked = await linkBarcode(product, pendingBarcode)
+      await addToList(linked)
       setPendingBarcode(null)
-      navigate(`/product/${product.id}`, { state: { product: linked } })
+      setQuery('')
+      setScanned(linked)
     } catch (err) {
       setLinkError(`No se pudo guardar el código: ${err.message}`)
     }
@@ -147,6 +156,30 @@ export default function Search() {
         {scanError && (
           <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 text-sm text-orange-400">
             {scanError}
+          </div>
+        )}
+
+        {scanned && (
+          <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 flex items-center gap-3">
+            {scanned.imageUrl && (
+              <img src={scanned.imageUrl} alt="" className="w-10 h-10 rounded-lg object-contain bg-white p-0.5 shrink-0" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-green-400 text-sm font-medium">Agregado a tu lista</p>
+              <p className="text-gray-300 text-xs truncate">{scanned.name}</p>
+            </div>
+            <button
+              onClick={() => navigate(`/product/${scanned.id}`, { state: { product: scanned } })}
+              className="shrink-0 text-xs text-green-400 underline"
+            >
+              Ver
+            </button>
+            <button
+              onClick={() => { setScanned(null); setShowScanner(true) }}
+              className="shrink-0 bg-green-500 text-white text-xs px-3 py-2 rounded-lg font-medium"
+            >
+              Escanear otro
+            </button>
           </div>
         )}
 
