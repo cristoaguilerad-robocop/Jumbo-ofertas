@@ -37,6 +37,30 @@ export function excludedBy(categoryPath) {
   return null
 }
 
+/**
+ * Raíces que agrupan productos por criterio comercial, no por tipo.
+ *
+ * `jumbo-ofertas` y `experiencias-jumbo` no son secciones del supermercado:
+ * son vitrinas que reúnen productos que además viven en su categoría real. Un
+ * aceite vegetal aparece en «experiencias-jumbo/marcas-exclusivas/cuisine---co»
+ * y también en despensa. Si la vitrina escribe última, el producto queda
+ * etiquetado «Experiencias Jumbo», que no sirve para filtrar ni para agrupar
+ * una lista de compras.
+ */
+export const PROMO_ROOTS = [
+  'jumbo-ofertas',
+  'experiencias-jumbo',
+  'ofertas',
+  'promociones',
+  'liquidacion',
+]
+
+/** ¿Esta ruta es una vitrina promocional en vez de una categoría real? */
+export function isPromoLanding(categoryPath) {
+  const root = categoryPath.toLowerCase().split('/').filter(Boolean)[0]
+  return PROMO_ROOTS.includes(root)
+}
+
 export function isExcluded(categoryPath) {
   return excludedBy(categoryPath) !== null
 }

@@ -1,6 +1,6 @@
 import { supabase, isConfigured } from '../supabase'
 import { fetchCategories, fetchCategory } from './jumboApi'
-import { excludedBy, prettifySlug } from './catalogFilters'
+import { excludedBy, isPromoLanding, prettifySlug } from './catalogFilters'
 
 const UPSERT_BATCH = 400
 const THROTTLE_MS = 60
@@ -180,15 +180,23 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
     if (section) excluded.push({ path, section })
     else included.push(path)
   }
-  // Las landings promocionales como "jumbo-ofertas" agrupan productos que
-  // también viven en su categoría real. Como el upsert sobrescribe, se recorren
-  // primero las rutas menos específicas para que la categoría verdadera sea la
-  // última en escribir y quede como etiqueta final.
-  const categories = leafCategories(included)
-    .sort((a, b) => a.split('/').length - b.split('/').length)
+  // Las vitrinas promocionales agrupan productos que también viven en su
+  // categoría real, y como el upsert sobrescribe, la última en escribir decide
+  // la etiqueta. Ordenar por profundidad no bastaba: con 8 workers en paralelo
+  // el orden es solo aproximado y la vitrina podía ganarle la carrera a la
+  // categoría real. Se recorren en dos fases que no se solapan, así la
+  // categoría real siempre escribe después.
+  const leaves = leafCategories(included)
+  const promoLandings = leaves.filter(isPromoLanding)
+  const realCategories = leaves.filter(p => !isPromoLanding(p))
+  const categories = [...promoLandings, ...realCategories]
 
   const saved = restart ? null : loadProgress()
   const done = new Set(saved?.doneCategories || [])
+  // Un producto se escribe una vez por cada categoría donde aparece, así que
+  // contar escrituras exagera el catálogo: 31.000 escrituras eran 17.500
+  // productos. Se lleva aparte el conteo de ids distintos, que es el real.
+  const uniqueIds = new Set()
   let totalSaved = saved?.totalSaved || 0
   let failed = saved?.failed || 0
   let lastError = null
@@ -196,6 +204,7 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
   const startedAt = Date.now()
   const startedAtIso = new Date().toISOString()
   const alreadyDone = done.size
+  let phaseLabel = 'vitrinas'
 
   const base = {
     phase: 'crawling',
@@ -203,6 +212,7 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
     excludedCount: excluded.length,
     excludedSections: [...new Set(excluded.map(e => e.section))],
     skippedParents: included.length - categories.length,
+    promoLandings: promoLandings.length,
     discovery: stats,
   }
 
@@ -214,6 +224,8 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
       ...base,
       doneCategories: done.size,
       totalSaved,
+      uniqueProducts: uniqueIds.size,
+      phaseLabel,
       failed,
       lastError,
       productsPerMin: elapsedMin > 0.2 ? Math.round(totalSaved / elapsedMin) : null,
@@ -247,14 +259,15 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
 
       await upsertProducts(fresh, categoryPath)
       totalSaved += fresh.length
+      fresh.forEach(p => uniqueIds.add(p.id))
       report(snapshot({ currentCategory: [...active][0], currentPage: page }))
 
       await sleep(THROTTLE_MS)
     }
   }
 
-  async function worker() {
-    while (cursor < categories.length) {
+  async function worker(end) {
+    while (cursor < end) {
       if (signal?.aborted) throw new DOMException('Sincronización cancelada', 'AbortError')
 
       if (budgetSpent()) { outOfTime = true; return }
@@ -284,7 +297,17 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
     }
   }
 
-  await Promise.all(Array.from({ length: CONCURRENCY }, worker))
+  // Fase 1: las vitrinas. Fase 2: las categorías reales, que sobrescriben la
+  // etiqueta de todo producto que aparezca en ambas. Esperar a que la fase 1
+  // termine por completo es lo que garantiza el orden; sin esa barrera, la
+  // concurrencia lo deshacía.
+  phaseLabel = 'vitrinas'
+  cursor = 0
+  await Promise.all(Array.from({ length: CONCURRENCY }, () => worker(promoLandings.length)))
+
+  phaseLabel = 'categorias'
+  cursor = promoLandings.length
+  await Promise.all(Array.from({ length: CONCURRENCY }, () => worker(categories.length)))
 
   // Solo tiene sentido purgar tras un recorrido completo desde cero: si quedó
   // a medias, lo no visitado todavía tiene `updated_at` viejo y se borraría
@@ -303,6 +326,7 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
   report(snapshot({ phase: 'done', outOfTime, purged, purgeError, complete }))
   return {
     totalSaved,
+    uniqueProducts: uniqueIds.size,
     failed,
     lastError,
     outOfTime,
@@ -310,6 +334,7 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
     purgeError,
     complete,
     categories: categories.length,
+    promoLandings: promoLandings.length,
     excluded: excluded.length,
   }
 }
