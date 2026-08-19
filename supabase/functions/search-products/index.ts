@@ -375,6 +375,54 @@ async function probeConstructor() {
   }
 }
 
+/**
+ * Comprueba qué parámetro de paginación usa jumbo.cl.
+ *
+ * Sospecha: el crawl guardó ~41 productos por categoría, justo lo que rinde
+ * una página. Si `?page=2` devuelve lo mismo que la página 1, la paginación
+ * nunca avanzó y el catálogo quedó en su primera página por categoría.
+ */
+async function probePaging(categoryPath: string) {
+  const base = `/${categoryPath}`
+  const first = await fetchHtml(base, true)
+  const firstIds = new Set(extractProducts(first.html).map(p => p.id))
+
+  const variants = [
+    `${base}?page=2`,
+    `${base}?p=2`,
+    `${base}?from=41`,
+    `${base}?offset=41`,
+    `${base}?start=41`,
+    `${base}?_from=41&_to=81`,
+    `${base}?page=2&count=41`,
+  ]
+
+  const results = []
+  for (const path of variants) {
+    try {
+      const res = await fetchHtml(path, true)
+      const products = extractProducts(res.html)
+      const nuevos = products.filter(p => !firstIds.has(p.id)).length
+      results.push({
+        path,
+        status: res.status,
+        products: products.length,
+        nuevos,
+        avanza: nuevos > 0,
+      })
+    } catch (err) {
+      results.push({ path, error: String(err) })
+    }
+  }
+
+  return {
+    categoria: categoryPath,
+    productosPagina1: firstIds.size,
+    variantes: results.sort((a, b) => (b.nuevos ?? -1) - (a.nuevos ?? -1)),
+  }
+}
+
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
@@ -474,8 +522,13 @@ Deno.serve(async (req: Request) => {
         target,
         strategies: results.sort((a, b) => (a.kbPerProduct ?? 1e9) - (b.kbPerProduct ?? 1e9)),
         constructorUrls: cnstrcUrls,
-        constructor: await probeConstructor(),
+        paginacion: await probePaging('lacteos'),
       }, null, 2), { headers: JSON_HEADERS })
+    }
+
+    if (url.searchParams.get('paging') === '1') {
+      const cat = url.searchParams.get('category') || 'lacteos'
+      return new Response(JSON.stringify(await probePaging(cat), null, 2), { headers: JSON_HEADERS })
     }
 
     if (url.searchParams.get('cnstrc') === '1') {
