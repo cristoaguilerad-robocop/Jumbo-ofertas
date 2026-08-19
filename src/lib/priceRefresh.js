@@ -1,5 +1,6 @@
 import { supabase, isConfigured } from '../supabase'
 import { fetchSearch } from './jumboApi'
+import { recordPrices } from './catalogDb'
 
 const CONCURRENCY = 4
 
@@ -39,17 +40,23 @@ export async function refreshListPrices(items, { onUpdate, signal } = {}) {
   await Promise.all(Array.from({ length: CONCURRENCY }, worker))
 
   // El precio recién traído también actualiza el catálogo, así la próxima
-  // consulta ya lo tiene sin esperar a la siguiente sincronización.
-  if (isConfigured) {
-    await Promise.all(Object.values(fresh).map(p =>
-      supabase.from('products').update({
-        current_price: p.currentPrice,
-        regular_price: p.regularPrice,
-        is_on_sale: p.isOnSale,
-        discount_percent: p.discountPercent,
-        updated_at: new Date().toISOString(),
-      }).eq('id', p.id)
-    )).catch(() => { /* el refresco en pantalla ya sirvió */ })
+  // consulta ya lo tiene sin esperar a la siguiente sincronización, y queda
+  // anotado en el historial: es la única fuente de datos reales para el gráfico
+  // de la ficha, que antes dibujaba una curva inventada.
+  const values = Object.values(fresh)
+  if (isConfigured && values.length) {
+    await Promise.all([
+      ...values.map(p =>
+        supabase.from('products').update({
+          current_price: p.currentPrice,
+          regular_price: p.regularPrice,
+          is_on_sale: p.isOnSale,
+          discount_percent: p.discountPercent,
+          updated_at: new Date().toISOString(),
+        }).eq('id', p.id)
+      ),
+      recordPrices(values),
+    ]).catch(() => { /* el refresco en pantalla ya sirvió */ })
   }
 
   return fresh

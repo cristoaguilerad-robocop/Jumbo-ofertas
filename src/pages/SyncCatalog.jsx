@@ -17,6 +17,7 @@ export default function SyncCatalog() {
   const [error, setError] = useState(null)
   const [catalogCount, setCatalogCount] = useState(null)
   const [resumable, setResumable] = useState(false)
+  const [resumeInfo, setResumeInfo] = useState(null)
   const [diag, setDiag] = useState(null)
   const [diagLoading, setDiagLoading] = useState(false)
   const abortRef = useRef(null)
@@ -35,7 +36,9 @@ export default function SyncCatalog() {
 
   useEffect(() => {
     countCatalog().then(setCatalogCount)
-    setResumable(!!loadProgress())
+    const saved = loadProgress()
+    setResumable(!!saved)
+    setResumeInfo(saved)
   }, [])
 
   async function start(restart) {
@@ -44,17 +47,28 @@ export default function SyncCatalog() {
     const controller = new AbortController()
     abortRef.current = controller
     try {
-      await syncCatalog({
+      const result = await syncCatalog({
         signal: controller.signal,
         restart,
         onProgress: p => setProgress(prev => ({ ...prev, ...p })),
       })
-      clearProgress()
-      setResumable(false)
+      // Solo se borra el punto de retomada si el recorrido terminó de verdad.
+      // Antes se borraba siempre, así que agotar los 10 minutos dejaba el
+      // progreso en la basura y la única salida era empezar de cero.
+      if (result.outOfTime) {
+        setResumeInfo(loadProgress())
+        setResumable(!!loadProgress())
+      } else {
+        clearProgress()
+        setResumable(false)
+      }
       setCatalogCount(await countCatalog())
     } catch (err) {
       if (err.name !== 'AbortError') setError(err.message)
+      // Detener a mano también deja desde dónde seguir.
+      setResumeInfo(loadProgress())
       setResumable(!!loadProgress())
+      setCatalogCount(await countCatalog().catch(() => null))
     } finally {
       setRunning(false)
       abortRef.current = null
@@ -124,22 +138,41 @@ export default function SyncCatalog() {
                 ))}
               </div>
             </div>
-            <div className="flex gap-2">
+            {resumable && (
+              <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3">
+                <p className="text-green-400 text-xs font-medium">Hay una descarga a medias</p>
+                <p className="text-gray-400 text-xs mt-0.5">
+                  Quedaron {resumeInfo?.doneCategories?.length || 0} categorías listas
+                  {resumeInfo?.totalSaved
+                    ? ` y ${resumeInfo.totalSaved.toLocaleString('es-CL')} productos guardados`
+                    : ''}
+                  . «Retomar» sigue desde ahí sin repetirlas.
+                </p>
+              </div>
+            )}
+            <div className="space-y-2">
               <button
                 onClick={() => start(false)}
                 disabled={!isConfigured}
-                className="flex-1 bg-green-500 hover:bg-green-600 disabled:opacity-40 text-white py-3 rounded-xl font-semibold text-sm"
+                className="w-full bg-green-500 hover:bg-green-600 disabled:opacity-40 text-white py-3 rounded-xl font-semibold text-sm"
               >
-                {resumable ? 'Retomar sincronización' : 'Sincronizar catálogo'}
+                {resumable ? '▶ Retomar donde quedó' : 'Sincronizar catálogo'}
               </button>
-              {resumable && (
-                <button
-                  onClick={() => { clearProgress(); setResumable(false); start(true) }}
-                  className="px-4 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl text-sm"
-                >
-                  Desde cero
-                </button>
-              )}
+              {/* «Desde cero» siempre disponible: es la única forma de corregir
+                  etiquetas de categoría mal asignadas y de purgar productos que
+                  Jumbo ya no lista. */}
+              <button
+                onClick={() => { clearProgress(); setResumable(false); start(true) }}
+                disabled={!isConfigured}
+                className="w-full bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-gray-300 py-2.5 rounded-xl text-sm"
+              >
+                Sincronizar desde cero
+              </button>
+              <p className="text-gray-500 text-xs">
+                «Desde cero» vuelve a recorrer todo y, al terminar completo, borra
+                los productos que Jumbo ya no lista y los artículos de prueba.
+                Conserva los códigos de barras que hayas vinculado escaneando.
+              </p>
             </div>
           </div>
         )}
@@ -148,7 +181,9 @@ export default function SyncCatalog() {
           <div className="bg-gray-800 rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-white font-medium text-sm">
-                {progress?.phase === 'categories' ? 'Leyendo categorías...' : 'Descargando productos'}
+                {progress?.phase === 'categories' ? 'Leyendo categorías...'
+                  : progress?.phase === 'purging' ? 'Limpiando productos que ya no existen...'
+                  : 'Descargando productos'}
               </span>
               <span className="text-green-400 font-bold text-sm">{pct}%</span>
             </div>
@@ -237,11 +272,24 @@ export default function SyncCatalog() {
             <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4 text-sm text-orange-400">
               Se alcanzó el límite de 10 minutos con {progress.totalSaved.toLocaleString('es-CL')} productos
               y {progress.doneCategories} de {progress.totalCategories} categorías.
-              Toca «Retomar sincronización» para continuar donde quedó.
+              Toca «Retomar donde quedó» para continuar; no se repite lo ya descargado.
             </div>
           ) : (
             <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 text-sm text-green-400">
               Catálogo sincronizado: {progress.totalSaved.toLocaleString('es-CL')} productos.
+              {progress.purgeError && (
+                <span className="block text-orange-400 text-xs mt-1">
+                  No se pudieron borrar los productos obsoletos: {progress.purgeError}.
+                  Ejecuta <span className="font-mono">supabase/cleanup.sql</span> en el SQL
+                  Editor para habilitar el permiso de borrado.
+                </span>
+              )}
+              {progress.purged > 0 && (
+                <span className="block text-gray-400 text-xs mt-1">
+                  Se eliminaron {progress.purged.toLocaleString('es-CL')} productos que ya no
+                  existen en Jumbo o quedaban de la fase de prueba.
+                </span>
+              )}
             </div>
           )
         )}

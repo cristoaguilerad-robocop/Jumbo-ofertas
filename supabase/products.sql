@@ -31,6 +31,7 @@ alter table products enable row level security;
 drop policy if exists "products readable by all"   on products;
 drop policy if exists "products writable by auth"  on products;
 drop policy if exists "products updatable by auth" on products;
+drop policy if exists "products deletable by auth" on products;
 
 create policy "products readable by all"
   on products for select using (true);
@@ -40,6 +41,12 @@ create policy "products writable by auth"
 
 create policy "products updatable by auth"
   on products for update to authenticated using (true) with check (true);
+
+-- Sin esta política, cualquier borrado se descartaba en silencio: la fila de
+-- comprobación que escribe el preflight quedaba para siempre en la tabla, y la
+-- limpieza posterior a una sincronización completa no eliminaba nada.
+create policy "products deletable by auth"
+  on products for delete to authenticated using (true);
 
 -- Categorías de primer nivel presentes en el catálogo, para los chips de filtro.
 create or replace function distinct_categories()

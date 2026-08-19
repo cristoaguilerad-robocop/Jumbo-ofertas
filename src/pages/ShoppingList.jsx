@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
-import { getProductById, formatPrice } from '../data/mockProducts'
+import { formatPrice } from '../data/catalog'
 import { getPricesForIds } from '../lib/catalogDb'
 import { refreshListPrices } from '../lib/priceRefresh'
 import OfferBadge from '../components/OfferBadge'
@@ -43,7 +43,7 @@ export default function ShoppingList() {
     return () => controller.abort()
   }, [listKey]) // eslint-disable-line
 
-  const priceOf = item => livePrices[item.productId] ?? getProductById(item.productId) ?? null
+  const priceOf = item => livePrices[item.productId] ?? null
 
   const grouped = useMemo(() => {
     const groups = {}
@@ -135,8 +135,17 @@ export default function ShoppingList() {
                         isOnSale ? 'ring-1 ring-orange-500/30' : ''
                       }`}
                     >
-                      {item.imageUrl && (
-                        <img src={item.imageUrl} alt="" className="w-11 h-11 rounded-lg object-contain bg-white p-0.5 shrink-0" />
+                      {item.imageUrl ? (
+                        <img
+                          src={item.imageUrl}
+                          alt=""
+                          loading="lazy"
+                          className="w-16 h-16 rounded-xl object-contain bg-white p-1 shrink-0"
+                        />
+                      ) : (
+                        <div className="w-16 h-16 rounded-xl bg-gray-700 flex items-center justify-center text-2xl shrink-0">
+                          {CATEGORY_EMOJIS[item.category] || '🛒'}
+                        </div>
                       )}
                       <div
                         className="flex-1 min-w-0 cursor-pointer"

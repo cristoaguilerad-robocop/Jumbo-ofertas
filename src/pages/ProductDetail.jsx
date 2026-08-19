@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { getProductById, formatPrice } from '../data/mockProducts'
+import { formatPrice } from '../data/catalog'
 import { useApp } from '../context/AppContext'
-import { getCatalogProduct } from '../lib/catalogDb'
+import { getCatalogProduct, getPriceHistory, recordPrices } from '../lib/catalogDb'
+import PriceHistory from '../components/PriceHistory'
 import OfferBadge from '../components/OfferBadge'
 
 const CATEGORY_EMOJIS = {
@@ -11,37 +12,48 @@ const CATEGORY_EMOJIS = {
   'Snacks': '🍿', 'Congelados': '🧊', 'Despensa': '🥫', 'Higiene': '🧴',
 }
 
-function generateHistory(product) {
-  const months = ['Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago']
-  const base = product.regularPrice
-  return months.map((month, i) => {
-    const variation = Math.sin(i * 1.3 + (product.id?.charCodeAt?.(1) || 42)) * 0.15
-    const price = Math.round((base + base * variation) / 10) * 10
-    const isLast = i === months.length - 1
-    return { month, price: isLast && product.isOnSale ? product.currentPrice : price, isOnSale: isLast && product.isOnSale }
-  })
-}
-
 export default function ProductDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
   const { addToList, removeFromList, isInList, setTargetPrice, shoppingList } = useApp()
 
-  // Producto desde el estado de navegación (resultado en vivo de Jumbo), del
-  // catálogo indexado si se recargó la página, o del mock como último recurso.
+  // Producto desde el estado de navegación (resultado en vivo de Jumbo) o del
+  // catálogo indexado si se recargó la página.
   const [fetched, setFetched] = useState(null)
   const [lookingUp, setLookingUp] = useState(false)
-  const product = location.state?.product || fetched || getProductById(id)
+  const product = location.state?.product || fetched
 
   useEffect(() => {
-    if (location.state?.product || getProductById(id)) return
+    if (location.state?.product) return
     setLookingUp(true)
     getCatalogProduct(id)
       .then(setFetched)
       .catch(() => setFetched(null))
       .finally(() => setLookingUp(false))
   }, [id]) // eslint-disable-line
+
+  // Historial real: lo que la app fue registrando cada vez que consultó el
+  // precio. Se anota también la visita de hoy, así una ficha abierta a diario
+  // va construyendo su propia serie.
+  const [history, setHistory] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(true)
+
+  useEffect(() => {
+    let alive = true
+    setHistoryLoading(true)
+    getPriceHistory(id)
+      .then(rows => { if (alive) setHistory(rows) })
+      .catch(() => { if (alive) setHistory([]) })
+      .finally(() => { if (alive) setHistoryLoading(false) })
+    return () => { alive = false }
+  }, [id])
+
+  const observedPrice = product?.currentPrice
+  useEffect(() => {
+    if (!product || !Number.isFinite(observedPrice)) return
+    recordPrices([product]).catch(() => { /* la ficha se ve igual sin registrar */ })
+  }, [product?.id, observedPrice]) // eslint-disable-line
 
   const inList = isInList(id)
   const listItem = shoppingList[id]
@@ -65,9 +77,6 @@ export default function ProductDetail() {
     )
   }
 
-  const history = generateHistory(product)
-  const maxPrice = Math.max(...history.map(h => h.price))
-  const minPrice = Math.min(...history.map(h => h.price))
   const savings = product.isOnSale ? product.regularPrice - product.currentPrice : 0
 
   const handleToggle = async () => {
@@ -102,9 +111,9 @@ export default function ProductDetail() {
         {/* Hero */}
         <div className="bg-gray-800 rounded-2xl p-6 text-center">
           {product.imageUrl ? (
-            <img src={product.imageUrl} alt={product.name} className="w-24 h-24 object-contain mx-auto mb-4 rounded-xl" />
+            <img src={product.imageUrl} alt={product.name} className="w-40 h-40 object-contain mx-auto mb-4 rounded-2xl bg-white p-2" />
           ) : (
-            <div className={`w-20 h-20 mx-auto rounded-2xl flex items-center justify-center text-4xl mb-4 ${product.isOnSale ? 'bg-orange-500/10' : 'bg-gray-700'}`}>
+            <div className={`w-32 h-32 mx-auto rounded-2xl flex items-center justify-center text-5xl mb-4 ${product.isOnSale ? 'bg-orange-500/10' : 'bg-gray-700'}`}>
               {CATEGORY_EMOJIS[product.category] || '🛒'}
             </div>
           )}
@@ -179,25 +188,7 @@ export default function ProductDetail() {
         )}
 
         {/* Price history */}
-        <div className="bg-gray-800 rounded-2xl p-4">
-          <h2 className="text-white font-semibold mb-4">Historial de precio</h2>
-          <div className="flex items-end gap-1 h-28">
-            {history.map((h, i) => {
-              const pct = maxPrice === minPrice ? 60 : 20 + ((h.price - minPrice) / (maxPrice - minPrice)) * 60
-              return (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                  <div className={`w-full rounded-t-md ${h.isOnSale ? 'bg-orange-500' : 'bg-green-600/50'}`}
-                    style={{ height: `${100 - pct}%` }} />
-                  <span className="text-gray-500 text-[9px]">{h.month}</span>
-                </div>
-              )
-            })}
-          </div>
-          <div className="flex justify-between mt-2">
-            <span className="text-gray-500 text-xs">Mín: {formatPrice(minPrice)}</span>
-            <span className="text-gray-500 text-xs">Máx: {formatPrice(maxPrice)}</span>
-          </div>
-        </div>
+        <PriceHistory history={history} loading={historyLoading} />
       </div>
 
       {/* Sticky button */}

@@ -132,3 +132,56 @@ export async function getPricesForIds(ids) {
     discountPercent: r.discount_percent || 0,
   }]))
 }
+
+/**
+ * Historial real de precios de un producto, del más antiguo al más reciente.
+ *
+ * La ficha dibujaba antes una curva generada con Math.sin bajo el título
+ * «Historial de precio»: mínimos y máximos inventados en una app cuyo propósito
+ * es decidir cuándo comprar. Ahora se lee lo que la app fue registrando.
+ */
+export async function getPriceHistory(productId, days = 180) {
+  if (!isConfigured || !productId) return []
+
+  const since = new Date()
+  since.setDate(since.getDate() - days)
+
+  const { data, error } = await supabase
+    .from('price_history')
+    .select('recorded_on, price, list_price, is_on_sale')
+    .eq('product_id', productId)
+    .gte('recorded_on', since.toISOString().slice(0, 10))
+    .order('recorded_on', { ascending: true })
+
+  if (error || !data) return []
+  return data.map(r => ({
+    date: r.recorded_on,
+    price: r.price,
+    listPrice: r.list_price,
+    isOnSale: !!r.is_on_sale,
+  }))
+}
+
+/**
+ * Guarda el precio observado hoy. Una fila por producto y día: refrescar varias
+ * veces en la misma jornada actualiza la del día en vez de acumular ruido.
+ */
+export async function recordPrices(products) {
+  if (!isConfigured || !products.length) return
+
+  const today = new Date().toISOString().slice(0, 10)
+  const rows = products
+    .filter(p => Number.isFinite(p.currentPrice))
+    .map(p => ({
+      product_id: p.id,
+      recorded_on: today,
+      price: p.currentPrice,
+      list_price: p.regularPrice ?? null,
+      is_on_sale: !!p.isOnSale,
+    }))
+  if (!rows.length) return
+
+  await supabase
+    .from('price_history')
+    .upsert(rows, { onConflict: 'product_id,recorded_on' })
+}

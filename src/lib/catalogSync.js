@@ -18,13 +18,20 @@ const PROGRESS_KEY = 'jumbo_sync_progress'
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
+/**
+ * Fila para `products`.
+ *
+ * Deliberadamente NO incluye `barcode`: el payload de Jumbo nunca trae el EAN,
+ * así que enviarlo como null hacía que cada re-sincronización borrara los
+ * códigos que el usuario había vinculado a mano escaneando. Al omitir la
+ * columna, el upsert no la toca y los vínculos sobreviven.
+ */
 function toRow(p, categoryPath) {
   const segments = categoryPath.split('/')
   return {
     id: p.id,
     name: p.name,
     brand: p.brand,
-    barcode: p.barcode || null,
     category: prettifySlug(segments[segments.length - 1]),
     category_top: prettifySlug(segments[0]),
     category_path: categoryPath,
@@ -119,6 +126,39 @@ function leafCategories(paths) {
   })
 }
 
+/**
+ * Borra lo que quedó fuera de una sincronización completa desde cero:
+ *
+ *   - productos que Jumbo ya no lista (su `updated_at` quedó viejo)
+ *   - artículos de la fase de desarrollo, cuyos ids no tienen el prefijo
+ *     `jumbo_` porque nunca vinieron del sitio real
+ *
+ * Se respetan las filas con `barcode`: son las que el usuario vinculó
+ * escaneando, y perderlas obligaría a repetir ese trabajo.
+ */
+async function purgeStale(startedAtIso) {
+  let removed = 0
+
+  // Artículos de la fase de desarrollo y filas de comprobación del preflight.
+  const dev = await supabase
+    .from('products')
+    .delete({ count: 'exact' })
+    .not('id', 'like', 'jumbo\\_%')
+  if (dev.error) return { removed: 0, error: dev.error.message }
+  removed += dev.count || 0
+
+  // Productos que Jumbo ya no lista: no los tocó esta pasada.
+  const stale = await supabase
+    .from('products')
+    .delete({ count: 'exact' })
+    .lt('updated_at', startedAtIso)
+    .is('barcode', null)
+  if (stale.error) return { removed, error: stale.error.message }
+  removed += stale.count || 0
+
+  return { removed, error: null }
+}
+
 export async function syncCatalog({ onProgress, signal, restart = false } = {}) {
   if (!isConfigured) throw new Error('Supabase no está configurado')
 
@@ -154,6 +194,7 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
   let lastError = null
 
   const startedAt = Date.now()
+  const startedAtIso = new Date().toISOString()
   const alreadyDone = done.size
 
   const base = {
@@ -245,12 +286,29 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
 
   await Promise.all(Array.from({ length: CONCURRENCY }, worker))
 
-  report(snapshot({ phase: 'done', outOfTime }))
+  // Solo tiene sentido purgar tras un recorrido completo desde cero: si quedó
+  // a medias, lo no visitado todavía tiene `updated_at` viejo y se borraría
+  // catálogo bueno.
+  let purged = 0
+  let purgeError = null
+  const complete = restart && !outOfTime && done.size === categories.length
+  if (complete) {
+    report(snapshot({ phase: 'purging' }))
+    const result = await purgeStale(startedAtIso)
+      .catch(err => ({ removed: 0, error: err.message }))
+    purged = result.removed
+    purgeError = result.error
+  }
+
+  report(snapshot({ phase: 'done', outOfTime, purged, purgeError, complete }))
   return {
     totalSaved,
     failed,
     lastError,
     outOfTime,
+    purged,
+    purgeError,
+    complete,
     categories: categories.length,
     excluded: excluded.length,
   }
