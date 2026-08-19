@@ -156,7 +156,7 @@ export default function BarcodeScanner({ onDetected, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+    <div className="fixed inset-0 z-[60] bg-black flex flex-col overscroll-none">
       <div className="flex items-center justify-between p-4 pt-safe">
         <h2 className="text-white font-semibold text-lg">Escanear código</h2>
         <button

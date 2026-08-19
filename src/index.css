@@ -16,6 +16,15 @@
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
+  /* Espacio para no quedar debajo de la barra inferior fija, contando el área
+     segura del teléfono. Antes las páginas usaban un padding fijo que no la
+     consideraba, así que el último elemento quedaba tapado. */
+  .pb-nav {
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+  }
+  .bottom-nav {
+    bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 @keyframes scan {

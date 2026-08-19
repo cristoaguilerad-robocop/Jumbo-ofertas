@@ -86,7 +86,7 @@ export default function ProductDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 pb-32">
+    <div className="min-h-screen bg-gray-950 pb-nav">
       <div className="bg-gray-900 px-4 pt-safe pt-4 pb-4">
         <div className="max-w-lg mx-auto">
           <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-gray-400 text-sm">
@@ -201,7 +201,7 @@ export default function ProductDetail() {
       </div>
 
       {/* Sticky button */}
-      <div className="fixed bottom-16 left-0 right-0 px-4 pb-4">
+      <div className="fixed bottom-nav left-0 right-0 px-4 pb-2 z-30">
         <div className="max-w-lg mx-auto">
           <button
             onClick={handleToggle}

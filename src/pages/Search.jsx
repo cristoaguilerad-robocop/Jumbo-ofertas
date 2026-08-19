@@ -79,7 +79,7 @@ export default function Search() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 pb-24">
+    <div className="min-h-screen bg-gray-950 pb-nav">
       {showScanner && (
         <BarcodeScanner
           onDetected={handleBarcodeDetected}
