@@ -169,6 +169,11 @@ export default function SyncCatalog() {
                 Sincronizar desde cero
               </button>
               <p className="text-gray-500 text-xs">
+                Se recorre en dos fases: primero las vitrinas de ofertas, después las
+                categorías reales, para que cada producto quede etiquetado por lo que es
+                y no por la promoción en que aparece.
+              </p>
+              <p className="text-gray-500 text-xs">
                 «Desde cero» vuelve a recorrer todo y, al terminar completo, borra
                 los productos que Jumbo ya no lista y los artículos de prueba.
                 Conserva los códigos de barras que hayas vinculado escaneando.
@@ -183,7 +188,8 @@ export default function SyncCatalog() {
               <span className="text-white font-medium text-sm">
                 {progress?.phase === 'categories' ? 'Leyendo categorías...'
                   : progress?.phase === 'purging' ? 'Limpiando productos que ya no existen...'
-                  : 'Descargando productos'}
+                  : progress?.phaseLabel === 'vitrinas' ? 'Vitrinas de ofertas (1 de 2)'
+                  : 'Categorías del supermercado (2 de 2)'}
               </span>
               <span className="text-green-400 font-bold text-sm">{pct}%</span>
             </div>
@@ -197,10 +203,16 @@ export default function SyncCatalog() {
 
             <div className="grid grid-cols-2 gap-3 pt-1">
               <div>
-                <p className="text-gray-500 text-xs">Productos guardados</p>
+                <p className="text-gray-500 text-xs">Productos distintos</p>
                 <p className="text-white font-bold">
-                  {(progress?.totalSaved || 0).toLocaleString('es-CL')}
+                  {(progress?.uniqueProducts || 0).toLocaleString('es-CL')}
                 </p>
+                {progress?.totalSaved > progress?.uniqueProducts && (
+                  <p className="text-gray-500 text-[10px] mt-0.5">
+                    {progress.totalSaved.toLocaleString('es-CL')} lecturas · un producto
+                    aparece en varias categorías
+                  </p>
+                )}
               </div>
               <div>
                 <p className="text-gray-500 text-xs">Categorías</p>
@@ -270,13 +282,13 @@ export default function SyncCatalog() {
         {progress?.phase === 'done' && !running && (
           progress.outOfTime ? (
             <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4 text-sm text-orange-400">
-              Se alcanzó el límite de 10 minutos con {progress.totalSaved.toLocaleString('es-CL')} productos
+              Se alcanzó el límite de 10 minutos con {(progress.uniqueProducts || 0).toLocaleString('es-CL')} productos
               y {progress.doneCategories} de {progress.totalCategories} categorías.
               Toca «Retomar donde quedó» para continuar; no se repite lo ya descargado.
             </div>
           ) : (
             <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 text-sm text-green-400">
-              Catálogo sincronizado: {progress.totalSaved.toLocaleString('es-CL')} productos.
+              Catálogo sincronizado: {(progress.uniqueProducts || 0).toLocaleString('es-CL')} productos distintos.
               {progress.purgeError && (
                 <span className="block text-orange-400 text-xs mt-1">
                   No se pudieron borrar los productos obsoletos: {progress.purgeError}.
