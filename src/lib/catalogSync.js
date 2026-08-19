@@ -106,13 +106,6 @@ async function upsertProducts(products, categoryPath) {
 }
 
 /**
- * Descarga el catálogo de Jumbo a Supabase, categoría por categoría.
- *
- * Corre en el navegador y es reanudable: el progreso se guarda tras cada
- * categoría, así que si se corta, la siguiente corrida retoma donde quedó.
- * Se excluyen las secciones definidas en catalogFilters.
- */
-/**
  * Deja fuera las categorías que tienen subcategorías: sus productos ya salen
  * al recorrer las hojas, y el padre además tope antes por MAX_PAGES.
  */
@@ -147,7 +140,12 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
     if (section) excluded.push({ path, section })
     else included.push(path)
   }
+  // Las landings promocionales como "jumbo-ofertas" agrupan productos que
+  // también viven en su categoría real. Como el upsert sobrescribe, se recorren
+  // primero las rutas menos específicas para que la categoría verdadera sea la
+  // última en escribir y quede como etiqueta final.
   const categories = leafCategories(included)
+    .sort((a, b) => a.split('/').length - b.split('/').length)
 
   const saved = restart ? null : loadProgress()
   const done = new Set(saved?.doneCategories || [])
