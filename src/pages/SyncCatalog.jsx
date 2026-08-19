@@ -188,6 +188,7 @@ export default function SyncCatalog() {
               <span className="text-white font-medium text-sm">
                 {progress?.phase === 'categories' ? 'Leyendo categorías...'
                   : progress?.phase === 'purging' ? 'Limpiando productos que ya no existen...'
+                  : progress?.phase === 'relabeling' ? 'Corrigiendo categorías...'
                   : progress?.phaseLabel === 'vitrinas' ? 'Vitrinas de ofertas (1 de 2)'
                   : 'Categorías del supermercado (2 de 2)'}
               </span>
@@ -289,6 +290,18 @@ export default function SyncCatalog() {
           ) : (
             <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 text-sm text-green-400">
               Catálogo sincronizado: {(progress.uniqueProducts || 0).toLocaleString('es-CL')} productos distintos.
+              {progress.relabeled > 0 && (
+                <span className="block text-gray-400 text-xs mt-1">
+                  Se corrigió la categoría de {progress.relabeled.toLocaleString('es-CL')} productos
+                  que habían quedado etiquetados por la promoción en que aparecían.
+                </span>
+              )}
+              {progress.promoOnly > 0 && (
+                <span className="block text-gray-400 text-xs mt-1">
+                  {progress.promoOnly.toLocaleString('es-CL')} productos solo existen dentro de una
+                  vitrina promocional en jumbo.cl, así que esa es su única categoría disponible.
+                </span>
+              )}
               {progress.purgeError && (
                 <span className="block text-orange-400 text-xs mt-1">
                   No se pudieron borrar los productos obsoletos: {progress.purgeError}.

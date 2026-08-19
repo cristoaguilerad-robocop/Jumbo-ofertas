@@ -45,6 +45,31 @@ function toRow(p, categoryPath) {
   }
 }
 
+/**
+ * Cuál de dos rutas describe mejor a un producto.
+ *
+ * Un producto aparece en varias categorías, y hasta ahora la etiqueta la
+ * decidía cuál escribiera última: primero por azar, después por orden de
+ * fases. Ordenar hacía la etiqueta *probable*, no correcta — y quedaban
+ * productos bajo «Experiencias Jumbo» sin saber si era su categoría real o el
+ * resultado de una carrera perdida. Aquí se decide por la ruta misma, así el
+ * resultado no depende de en qué orden se recorra nada.
+ *
+ * Gana la categoría real sobre la vitrina; entre dos iguales, la más
+ * específica; y a igualdad, la primera alfabéticamente, para que dos
+ * sincronizaciones den el mismo resultado.
+ */
+function betterPath(a, b) {
+  if (!a) return b
+  if (!b) return a
+  const aPromo = isPromoLanding(a)
+  const bPromo = isPromoLanding(b)
+  if (aPromo !== bPromo) return aPromo ? b : a
+  const depth = b.split('/').length - a.split('/').length
+  if (depth !== 0) return depth > 0 ? b : a
+  return a < b ? a : b
+}
+
 export function loadProgress() {
   try { return JSON.parse(localStorage.getItem(PROGRESS_KEY) || 'null') } catch { return null }
 }
@@ -110,6 +135,33 @@ async function upsertProducts(products, categoryPath) {
       .upsert(rows.slice(i, i + UPSERT_BATCH), { onConflict: 'id' })
     if (error) throw new Error(`Supabase: ${error.message}`)
   }
+}
+
+/**
+ * Reescribe solo las columnas de categoría de los productos mal etiquetados.
+ *
+ * No toca precios ni nombres: son los mismos que ya se guardaron, y volver a
+ * enviarlos solo agregaría peso y riesgo de pisar un dato más fresco.
+ */
+async function relabelProducts(fixes, signal) {
+  let updated = 0
+  for (let i = 0; i < fixes.length; i += UPSERT_BATCH) {
+    if (signal?.aborted) break
+    const batch = fixes.slice(i, i + UPSERT_BATCH).map(({ id, path }) => {
+      const segments = path.split('/')
+      return {
+        id,
+        category: prettifySlug(segments[segments.length - 1]),
+        category_top: prettifySlug(segments[0]),
+        category_path: path,
+      }
+    })
+    const { error } = await supabase.from('products').upsert(batch, { onConflict: 'id' })
+    if (error) throw new Error(`Supabase: ${error.message}`)
+    updated += batch.length
+    await sleep(THROTTLE_MS)
+  }
+  return updated
 }
 
 /**
@@ -197,6 +249,10 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
   // contar escrituras exagera el catálogo: 31.000 escrituras eran 17.500
   // productos. Se lleva aparte el conteo de ids distintos, que es el real.
   const uniqueIds = new Set()
+  // Mejor ruta vista por producto, y la que efectivamente quedó escrita. La
+  // diferencia entre ambas es lo que hay que corregir al final.
+  const bestPath = new Map()
+  const writtenPath = new Map()
   let totalSaved = saved?.totalSaved || 0
   let failed = saved?.failed || 0
   let lastError = null
@@ -259,7 +315,11 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
 
       await upsertProducts(fresh, categoryPath)
       totalSaved += fresh.length
-      fresh.forEach(p => uniqueIds.add(p.id))
+      for (const p of fresh) {
+        uniqueIds.add(p.id)
+        bestPath.set(p.id, betterPath(bestPath.get(p.id), categoryPath))
+        writtenPath.set(p.id, categoryPath)
+      }
       report(snapshot({ currentCategory: [...active][0], currentPage: page }))
 
       await sleep(THROTTLE_MS)
@@ -309,12 +369,28 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
   cursor = promoLandings.length
   await Promise.all(Array.from({ length: CONCURRENCY }, () => worker(categories.length)))
 
+  // Corrige las etiquetas que quedaron mal por orden de escritura. Solo tras un
+  // recorrido completo: a medias, la mejor ruta de un producto puede estar en
+  // una categoría todavía no visitada.
+  let relabeled = 0
+  let promoOnly = 0
+  const completeRun = restart && !outOfTime && done.size === categories.length
+  if (completeRun) {
+    report(snapshot({ phase: 'relabeling' }))
+    const fixes = []
+    for (const [id, best] of bestPath) {
+      if (isPromoLanding(best)) promoOnly += 1
+      if (writtenPath.get(id) !== best) fixes.push({ id, path: best })
+    }
+    relabeled = await relabelProducts(fixes, signal).catch(() => 0)
+  }
+
   // Solo tiene sentido purgar tras un recorrido completo desde cero: si quedó
   // a medias, lo no visitado todavía tiene `updated_at` viejo y se borraría
   // catálogo bueno.
   let purged = 0
   let purgeError = null
-  const complete = restart && !outOfTime && done.size === categories.length
+  const complete = completeRun
   if (complete) {
     report(snapshot({ phase: 'purging' }))
     const result = await purgeStale(startedAtIso)
@@ -323,10 +399,12 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
     purgeError = result.error
   }
 
-  report(snapshot({ phase: 'done', outOfTime, purged, purgeError, complete }))
+  report(snapshot({ phase: 'done', outOfTime, purged, purgeError, complete, relabeled, promoOnly }))
   return {
     totalSaved,
     uniqueProducts: uniqueIds.size,
+    relabeled,
+    promoOnly,
     failed,
     lastError,
     outOfTime,
