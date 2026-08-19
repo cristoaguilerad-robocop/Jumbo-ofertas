@@ -290,6 +290,18 @@ export default function SyncCatalog() {
           ) : (
             <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 text-sm text-green-400">
               Catálogo sincronizado: {(progress.uniqueProducts || 0).toLocaleString('es-CL')} productos distintos.
+              {progress.relabelError && (
+                <span className="block text-orange-400 text-xs mt-1">
+                  No se pudieron corregir {progress.pendingFixes?.toLocaleString('es-CL')} categorías:
+                  {' '}{progress.relabelError}
+                </span>
+              )}
+              {!progress.relabelError && progress.pendingFixes === 0 && (
+                <span className="block text-gray-400 text-xs mt-1">
+                  Ninguna categoría necesitó corrección: cada producto ya quedó guardado bajo
+                  la mejor ruta disponible.
+                </span>
+              )}
               {progress.relabeled > 0 && (
                 <span className="block text-gray-400 text-xs mt-1">
                   Se corrigió la categoría de {progress.relabeled.toLocaleString('es-CL')} productos

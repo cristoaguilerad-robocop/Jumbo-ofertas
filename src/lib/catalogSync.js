@@ -373,6 +373,8 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
   // recorrido completo: a medias, la mejor ruta de un producto puede estar en
   // una categoría todavía no visitada.
   let relabeled = 0
+  let relabelError = null
+  let pendingFixes = 0
   let promoOnly = 0
   const completeRun = restart && !outOfTime && done.size === categories.length
   if (completeRun) {
@@ -382,7 +384,15 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
       if (isPromoLanding(best)) promoOnly += 1
       if (writtenPath.get(id) !== best) fixes.push({ id, path: best })
     }
-    relabeled = await relabelProducts(fixes, signal).catch(() => 0)
+    pendingFixes = fixes.length
+    // Sin esto, un fallo de Supabase se reportaba como «0 corregidos», idéntico
+    // a no haber tenido nada que corregir. Son dos cosas muy distintas y la
+    // pantalla debe poder decir cuál ocurrió.
+    try {
+      relabeled = await relabelProducts(fixes, signal)
+    } catch (err) {
+      relabelError = err.message
+    }
   }
 
   // Solo tiene sentido purgar tras un recorrido completo desde cero: si quedó
@@ -399,11 +409,13 @@ export async function syncCatalog({ onProgress, signal, restart = false } = {}) 
     purgeError = result.error
   }
 
-  report(snapshot({ phase: 'done', outOfTime, purged, purgeError, complete, relabeled, promoOnly }))
+  report(snapshot({ phase: 'done', outOfTime, purged, purgeError, complete, relabeled, relabelError, pendingFixes, promoOnly }))
   return {
     totalSaved,
     uniqueProducts: uniqueIds.size,
     relabeled,
+    relabelError,
+    pendingFixes,
     promoOnly,
     failed,
     lastError,
