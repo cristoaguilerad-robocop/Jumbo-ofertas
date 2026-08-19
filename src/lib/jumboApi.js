@@ -55,6 +55,17 @@ export async function fetchByBarcode(barcode, signal) {
   return fetchSearch(barcode, 1, signal)
 }
 
+/**
+ * Identifica un código de barras vía Open Food Facts.
+ *
+ * Jumbo no publica el EAN, así que un escaneo no basta para saber qué producto
+ * es. Esta base abierta devuelve nombre y marca, y con eso se busca en el
+ * catálogo. No cubre todo, sobre todo fuera de alimentos.
+ */
+export async function lookupBarcode(barcode) {
+  return callProxy({ barcode })
+}
+
 /** Rutas de categoría de jumbo.cl, del sitemap y del menú de la home. */
 export async function fetchCategories() {
   const json = await callProxy({ categories: '1' })

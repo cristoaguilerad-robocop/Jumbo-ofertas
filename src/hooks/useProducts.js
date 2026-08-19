@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { searchProducts, getProductsByCategory, getProductByBarcode } from '../data/mockProducts'
-import { fetchSearch, fetchByBarcode } from '../lib/jumboApi'
+import { fetchSearch, fetchByBarcode, lookupBarcode } from '../lib/jumboApi'
 import { searchCatalog, getCatalogByBarcode, getCatalogCategories } from '../lib/catalogDb'
 
 const PAGE_SIZE = 24
@@ -155,19 +155,67 @@ export function useCategories(fallback) {
   return categories
 }
 
+/**
+ * Resuelve un código de barras a un producto de Jumbo.
+ *
+ * Jumbo no publica el EAN, así que hay que reconstruir el vínculo:
+ *   1. códigos ya vinculados a mano, que son los confiables
+ *   2. el buscador de Jumbo, por si indexa el código
+ *   3. Open Food Facts, que sí mapea EAN a nombre y marca; con eso se busca
+ *      el producto por nombre en el catálogo y en Jumbo
+ *
+ * Devuelve el producto, o un objeto con la pista de Open Food Facts para que
+ * la pantalla pueda proponer candidatos en vez de rendirse.
+ */
 export async function searchByBarcode(barcode) {
-  // 1. Códigos ya vinculados: es la vía confiable.
   const indexed = await getCatalogByBarcode(barcode).catch(() => null)
   if (indexed) return indexed
 
-  // 2. El buscador de Jumbo a veces indexa el código. Solo se acepta si
-  //    devuelve un único resultado: con varios se trata de una coincidencia
-  //    difusa sobre los dígitos, y devolver un producto equivocado en un
-  //    escaneo es peor que no encontrar nada.
+  // Un único resultado indica coincidencia real; varios son coincidencia
+  // difusa sobre los dígitos, y un producto equivocado es peor que ninguno.
   try {
     const live = await fetchByBarcode(barcode)
     if (live.length === 1) return live[0]
-  } catch { /* cae al mock */ }
+  } catch { /* sigue */ }
 
-  return getProductByBarcode(barcode) || null
+  const mock = getProductByBarcode(barcode)
+  if (mock) return mock
+
+  return null
+}
+
+/**
+ * Candidatos para un código que no se pudo resolver, usando el nombre que
+ * Open Food Facts asocia al EAN.
+ */
+export async function suggestForBarcode(barcode) {
+  let hint = null
+  try {
+    const off = await lookupBarcode(barcode)
+    if (off?.found) hint = off
+  } catch { /* sin pista */ }
+
+  if (!hint) return { hint: null, candidates: [] }
+
+  const terms = [hint.brand, hint.name].filter(Boolean).join(' ').trim()
+  let candidates = []
+
+  try {
+    candidates = (await searchCatalog({ query: terms, limit: 8 })) || []
+  } catch { /* sigue al vivo */ }
+
+  if (!candidates.length) {
+    try {
+      candidates = await fetchSearch(terms, 1)
+    } catch { /* sin candidatos */ }
+  }
+
+  // Si el nombre completo no rinde, se reintenta solo con la marca.
+  if (!candidates.length && hint.brand) {
+    try {
+      candidates = (await searchCatalog({ query: hint.brand, limit: 8 })) || []
+    } catch { /* nada más que probar */ }
+  }
+
+  return { hint, candidates: candidates.slice(0, 8) }
 }

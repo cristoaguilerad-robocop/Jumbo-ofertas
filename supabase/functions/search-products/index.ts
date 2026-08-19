@@ -13,6 +13,7 @@
 //   ?search=leche&page=1   productos de la búsqueda, ya normalizados
 //   ?category=lacteos      productos de una categoría
 //   ?categories=1          rutas de categoría, del sitemap y del menú
+//   ?barcode=780...        identifica un EAN vía Open Food Facts
 //   ?benchmark=1           compara estrategias de descarga (KB por producto)
 //   ?cnstrc=1              busca la clave de Constructor.io y prueba su API
 //   ?path=/...             proxy crudo de una ruta de jumbo.cl
@@ -423,6 +424,56 @@ async function probePaging(categoryPath: string) {
 }
 
 
+/**
+ * Consulta Open Food Facts por un código de barras.
+ *
+ * Jumbo no publica el EAN en ninguna parte, así que un escaneo por sí solo no
+ * identifica nada. Open Food Facts es una base abierta que mapea EAN a nombre
+ * y marca: con eso se puede buscar el producto en el catálogo de Jumbo. No
+ * trae precios ni cubre todo, pero resuelve la parte que falta.
+ */
+async function lookupBarcode(barcode: string) {
+  const clean = barcode.replace(/\D/g, '')
+  if (!clean) return { found: false, error: 'Código vacío' }
+
+  // Alimentos, cosmética y productos generales son bases separadas.
+  const bases = [
+    'https://world.openfoodfacts.org',
+    'https://world.openbeautyfacts.org',
+    'https://world.openproductsfacts.org',
+  ]
+
+  for (const base of bases) {
+    const url = `${base}/api/v2/product/${encodeURIComponent(clean)}.json`
+      + '?fields=product_name,product_name_es,brands,quantity,image_url'
+    try {
+      const res = await fetch(url, {
+        headers: { Accept: 'application/json', 'User-Agent': 'JumboOfertas/1.0' },
+      })
+      if (!res.ok) continue
+      const json = await res.json()
+      if (json?.status !== 1 || !json?.product) continue
+
+      const p = json.product
+      const name = p.product_name_es || p.product_name || ''
+      if (!name) continue
+
+      return {
+        found: true,
+        source: base.replace('https://world.', '').replace('.org', ''),
+        barcode: clean,
+        name,
+        brand: p.brands ? String(p.brands).split(',')[0].trim() : '',
+        quantity: p.quantity || '',
+        imageUrl: p.image_url || null,
+      }
+    } catch { /* se prueba la siguiente base */ }
+  }
+
+  return { found: false, barcode: clean }
+}
+
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
@@ -524,6 +575,11 @@ Deno.serve(async (req: Request) => {
         constructorUrls: cnstrcUrls,
         paginacion: await probePaging('lacteos'),
       }, null, 2), { headers: JSON_HEADERS })
+    }
+
+    const barcode = url.searchParams.get('barcode')
+    if (barcode) {
+      return new Response(JSON.stringify(await lookupBarcode(barcode)), { headers: JSON_HEADERS })
     }
 
     if (url.searchParams.get('paging') === '1') {
