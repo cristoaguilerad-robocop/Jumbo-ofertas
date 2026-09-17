@@ -6,6 +6,7 @@ import { getOffers } from '../lib/catalogDb'
 import { countCatalog } from '../lib/catalogSync'
 import ProductCard from '../components/ProductCard'
 import Logo from '../components/Logo'
+import ThemeToggle from '../components/ThemeToggle'
 
 export default function Home() {
   const navigate = useNavigate()
@@ -34,15 +35,16 @@ export default function Home() {
   ).length
 
   return (
-    <div className="min-h-screen bg-gray-950 pb-nav">
+    <div className="min-h-screen bg-canvas pb-nav">
       {/* Header */}
-      <div className="bg-gray-900 px-4 pt-header pb-6">
+      <div className="bg-surface px-4 pt-header pb-6">
         <div className="max-w-lg mx-auto">
           <div className="flex items-center gap-2.5 mb-1">
             <Logo className="w-9 h-9 shrink-0" />
-            <h1 className="text-2xl font-bold text-white">Jumbo Ofertas</h1>
+            <h1 className="text-2xl font-bold text-content">Jumbo Ofertas</h1>
+            <div className="ml-auto"><ThemeToggle /></div>
           </div>
-          <p className="text-gray-400 text-sm">Encuentra las mejores ofertas del día</p>
+          <p className="text-content-dim text-sm">Encuentra las mejores ofertas del día</p>
         </div>
       </div>
 
@@ -54,17 +56,17 @@ export default function Home() {
             className="bg-green-500 hover:bg-green-600 active:scale-95 transition-all rounded-2xl p-4 text-left"
           >
             <div className="text-2xl mb-2">🔍</div>
-            <p className="text-white font-semibold text-sm">Buscar producto</p>
+            <p className="text-content font-semibold text-sm">Buscar producto</p>
             <p className="text-green-100 text-xs mt-0.5">Por nombre o código</p>
           </button>
 
           <button
             onClick={() => navigate('/search?scanner=1')}
-            className="bg-gray-800 hover:bg-gray-700 active:scale-95 transition-all rounded-2xl p-4 text-left"
+            className="bg-card hover:bg-muted active:scale-95 transition-all rounded-2xl p-4 text-left"
           >
             <div className="text-2xl mb-2">📷</div>
-            <p className="text-white font-semibold text-sm">Escanear código</p>
-            <p className="text-gray-400 text-xs mt-0.5">Usa la cámara</p>
+            <p className="text-content font-semibold text-sm">Escanear código</p>
+            <p className="text-content-dim text-xs mt-0.5">Usa la cámara</p>
           </button>
         </div>
 
@@ -73,7 +75,7 @@ export default function Home() {
           onClick={() => navigate('/sync')}
           className={`w-full rounded-2xl p-4 flex items-center gap-3 text-left active:scale-[0.98] transition-all ${
             catalogCount > 0
-              ? 'bg-gray-800 hover:bg-gray-750'
+              ? 'bg-card hover:bg-card-hover'
               : 'bg-green-500/10 border border-green-500/20'
           }`}
         >
@@ -81,16 +83,16 @@ export default function Home() {
             📦
           </div>
           <div className="flex-1">
-            <p className="text-white font-medium text-sm">
+            <p className="text-content font-medium text-sm">
               {catalogCount > 0 ? 'Mi catálogo Jumbo' : 'Descargar catálogo completo'}
             </p>
-            <p className="text-gray-400 text-xs mt-0.5">
+            <p className="text-content-dim text-xs mt-0.5">
               {catalogCount > 0
                 ? `${catalogCount.toLocaleString('es-CL')} productos · toca para actualizar`
                 : 'Busca entre todos los productos de Jumbo al instante'}
             </p>
           </div>
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-gray-400">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-content-dim">
             <path fillRule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
           </svg>
         </button>
@@ -99,23 +101,23 @@ export default function Home() {
         {listCount > 0 && (
           <button
             onClick={() => navigate('/list')}
-            className="w-full bg-gray-800 rounded-2xl p-4 flex items-center gap-3 hover:bg-gray-750 active:scale-[0.98] transition-all text-left"
+            className="w-full bg-card rounded-2xl p-4 flex items-center gap-3 hover:bg-card-hover active:scale-[0.98] transition-all text-left"
           >
             <div className="w-12 h-12 bg-green-500/10 rounded-xl flex items-center justify-center text-2xl shrink-0">
               📋
             </div>
             <div className="flex-1">
-              <p className="text-white font-medium text-sm">
+              <p className="text-content font-medium text-sm">
                 Mi lista de compras
               </p>
-              <p className="text-gray-400 text-xs mt-0.5">
+              <p className="text-content-dim text-xs mt-0.5">
                 {listCount} {listCount === 1 ? 'producto' : 'productos'}
                 {listOfferCount > 0 && (
                   <span className="text-orange-400 font-medium"> · {listOfferCount} en oferta</span>
                 )}
               </p>
             </div>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-gray-400">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-content-dim">
               <path fillRule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
             </svg>
           </button>
@@ -124,7 +126,7 @@ export default function Home() {
         {/* Offers section */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-white font-semibold">Ofertas de hoy</h2>
+            <h2 className="text-content font-semibold">Ofertas de hoy</h2>
             <button
               onClick={() => navigate('/search?offers=1')}
               className="text-green-400 text-sm font-medium"
@@ -134,16 +136,16 @@ export default function Home() {
           </div>
           <div className="space-y-2">
             {offerProducts === null ? (
-              <div className="bg-gray-800 rounded-2xl p-6 flex justify-center">
+              <div className="bg-card rounded-2xl p-6 flex justify-center">
                 <div className="w-5 h-5 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
               </div>
             ) : offerProducts.length === 0 ? (
               <button
                 onClick={() => navigate('/sync')}
-                className="w-full bg-gray-800 rounded-2xl p-5 text-left"
+                className="w-full bg-card rounded-2xl p-5 text-left"
               >
-                <p className="text-gray-300 text-sm">Todavía no hay ofertas que mostrar.</p>
-                <p className="text-gray-500 text-xs mt-1">
+                <p className="text-content-soft text-sm">Todavía no hay ofertas que mostrar.</p>
+                <p className="text-content-faint text-xs mt-1">
                   Descarga el catálogo de Jumbo para ver las ofertas reales del día.
                 </p>
               </button>

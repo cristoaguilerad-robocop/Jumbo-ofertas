@@ -50,8 +50,55 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Paleta por función. El modo claro no es el oscuro invertido: los grises
+   fríos muy claros sobre blanco pierden el borde de las tarjetas, así que el
+   lienzo va un paso más oscuro que la tarjeta, al revés que en modo oscuro. */
+:root,
+:root.light {
+  --c-canvas: 241 245 249;
+  --c-surface: 255 255 255;
+  --c-card: 255 255 255;
+  --c-card-hover: 248 250 252;
+  --c-muted: 226 232 240;
+  --c-muted-strong: 203 213 225;
+  --c-line: 226 232 240;
+  --c-content: 15 23 42;
+  --c-content-soft: 51 65 85;
+  --c-content-dim: 71 85 105;
+  --c-content-faint: 100 116 139;
+  color-scheme: light;
+}
+
+:root.dark {
+  --c-canvas: 3 7 18;
+  --c-surface: 17 24 39;
+  --c-card: 31 41 55;
+  --c-card-hover: 37 48 66;
+  --c-muted: 55 65 81;
+  --c-muted-strong: 75 85 99;
+  --c-line: 55 65 81;
+  --c-content: 255 255 255;
+  --c-content-soft: 209 213 219;
+  --c-content-dim: 156 163 175;
+  /* Un paso más claro que gray-500. Ese tono daba 3.04 de contraste sobre la
+     tarjeta, por debajo del 4.5 que pide un texto de 11-12 px, que es el
+     tamaño en que se usa: etiquetas, unidades y fechas. */
+  --c-content-faint: 140 148 162;
+  color-scheme: dark;
+}
+
 body {
-  background-color: #030712;
-  color: white;
+  background-color: rgb(var(--c-canvas));
+  color: rgb(var(--c-content));
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+}
+
+/* Las fotos de producto vienen con fondo blanco recortado. Mantenerlo en
+   ambos temas conserva el contorno del envase; en modo claro se atenúa un poco
+   para que la tarjeta no se vea como un bloque blanco uniforme. */
+.product-media {
+  background-color: #ffffff;
+}
+:root.light .product-media {
+  background-color: #fbfcfd;
 }

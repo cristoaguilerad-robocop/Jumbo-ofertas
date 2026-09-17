@@ -16,6 +16,23 @@
 
     <meta name="description" content="Lista de compras inteligente para Jumbo. Escanea productos, detecta ofertas y ahorra." />
     <title>Jumbo Ofertas</title>
+    <script>
+      // El tema se fija antes de pintar. Si se dejara al efecto de React, la
+      // primera imagen sería la del tema por defecto y se vería un destello
+      // blanco al abrir la app de noche.
+      (function () {
+        try {
+          var choice = localStorage.getItem('jumbo_theme') || 'system'
+          var dark = choice === 'dark' || (choice === 'system' &&
+            !window.matchMedia('(prefers-color-scheme: light)').matches)
+          document.documentElement.classList.add(dark ? 'dark' : 'light')
+          var meta = document.querySelector('meta[name="theme-color"]')
+          if (meta) meta.setAttribute('content', dark ? '#030712' : '#f1f5f9')
+        } catch (e) {
+          document.documentElement.classList.add('dark')
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

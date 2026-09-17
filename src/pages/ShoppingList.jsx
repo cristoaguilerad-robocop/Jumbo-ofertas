@@ -7,6 +7,7 @@ import { refreshListPrices } from '../lib/priceRefresh'
 import OfferBadge from '../components/OfferBadge'
 import EmptyState from '../components/EmptyState'
 import ListSwitcher from '../components/ListSwitcher'
+import { productImageProps } from '../lib/productImage'
 
 const CATEGORY_EMOJIS = {
   'Lácteos': '🥛', 'Carnes': '🥩', 'Frutas y Verduras': '🥦', 'Bebidas': '🥤',
@@ -80,17 +81,17 @@ export default function ShoppingList() {
   const totalItems = Object.keys(shoppingList).length
 
   return (
-    <div className="min-h-screen bg-gray-950 pb-nav">
-      <div className="bg-gray-900 px-4 pt-header pb-4">
+    <div className="min-h-screen bg-canvas pb-nav">
+      <div className="bg-surface px-4 pt-header pb-4">
         <div className="max-w-lg mx-auto space-y-3">
           <ListSwitcher />
           {totalItems > 0 && (
-            <p className="text-gray-400 text-sm">
+            <p className="text-content-dim text-sm">
               {totalItems} {totalItems === 1 ? 'producto' : 'productos'}
               {balance.enOferta > 0 && (
                 <span className="text-orange-400"> · {balance.enOferta} en oferta 🎉</span>
               )}
-              {refreshing && <span className="text-gray-500"> · actualizando precios…</span>}
+              {refreshing && <span className="text-content-faint"> · actualizando precios…</span>}
             </p>
           )}
         </div>
@@ -116,10 +117,10 @@ export default function ShoppingList() {
         <div className="max-w-lg mx-auto px-4 pt-4 space-y-4">
           {Object.entries(grouped).map(([category, items]) => (
             <div key={category}>
-              <h2 className="text-gray-400 text-xs font-semibold uppercase tracking-wide px-1 mb-2 flex items-center gap-2">
+              <h2 className="text-content-dim text-xs font-semibold uppercase tracking-wide px-1 mb-2 flex items-center gap-2">
                 <span>{CATEGORY_EMOJIS[category] || '🛍️'}</span>
                 {category}
-                <span className="text-gray-600">({items.length})</span>
+                <span className="text-content-faint">({items.length})</span>
               </h2>
               <div className="space-y-2">
                 {items.map(item => {
@@ -131,19 +132,20 @@ export default function ShoppingList() {
                   return (
                     <div
                       key={item.productId}
-                      className={`bg-gray-800 rounded-2xl p-3 flex items-center gap-3 ${
+                      className={`bg-card rounded-2xl p-3 flex items-center gap-3 ${
                         isOnSale ? 'ring-1 ring-orange-500/30' : ''
                       }`}
                     >
                       {item.imageUrl ? (
                         <img
-                          src={item.imageUrl}
+                          {...productImageProps(item.imageUrl, 80)}
                           alt=""
                           loading="lazy"
-                          className="w-16 h-16 rounded-xl object-contain bg-white p-1 shrink-0"
+                          decoding="async"
+                          className="w-20 h-20 rounded-xl object-contain product-media p-1 shrink-0"
                         />
                       ) : (
-                        <div className="w-16 h-16 rounded-xl bg-gray-700 flex items-center justify-center text-2xl shrink-0">
+                        <div className="w-20 h-20 rounded-xl bg-muted flex items-center justify-center text-2xl shrink-0">
                           {CATEGORY_EMOJIS[item.category] || '🛒'}
                         </div>
                       )}
@@ -151,15 +153,15 @@ export default function ShoppingList() {
                         className="flex-1 min-w-0 cursor-pointer"
                         onClick={() => navigate(`/product/${item.productId}`)}
                       >
-                        <p className="text-white text-sm font-medium leading-tight line-clamp-2">
+                        <p className="text-content text-sm font-medium leading-tight line-clamp-2">
                           {item.name}
                         </p>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          <span className={`text-sm font-bold ${isOnSale ? 'text-green-400' : 'text-white'}`}>
+                          <span className={`text-sm font-bold ${isOnSale ? 'text-green-400' : 'text-content'}`}>
                             {formatPrice(currentPrice)}
                           </span>
                           {isOnSale && regular > currentPrice && (
-                            <span className="text-gray-500 text-xs line-through">
+                            <span className="text-content-faint text-xs line-through">
                               {formatPrice(regular)}
                             </span>
                           )}
@@ -168,7 +170,7 @@ export default function ShoppingList() {
                       </div>
                       <button
                         onClick={() => removeFromList(item.productId)}
-                        className="shrink-0 w-10 h-10 rounded-full bg-gray-700 hover:bg-red-500/20 text-gray-400 hover:text-red-400 flex items-center justify-center transition-colors"
+                        className="shrink-0 w-10 h-10 rounded-full bg-muted hover:bg-red-500/20 text-content-dim hover:text-red-400 flex items-center justify-center transition-colors"
                         aria-label={`Quitar ${item.name}`}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
@@ -183,10 +185,10 @@ export default function ShoppingList() {
           ))}
 
           {/* Balance de la lista */}
-          <div className="bg-gray-800 rounded-2xl p-4 space-y-2.5">
+          <div className="bg-card rounded-2xl p-4 space-y-2.5">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-400">Precio normal</span>
-              <span className={balance.ahorro > 0 ? 'text-gray-500 line-through' : 'text-white'}>
+              <span className="text-content-dim">Precio normal</span>
+              <span className={balance.ahorro > 0 ? 'text-content-faint line-through' : 'text-content'}>
                 {formatPrice(balance.normal)}
               </span>
             </div>
@@ -198,9 +200,9 @@ export default function ShoppingList() {
               </div>
             )}
 
-            <div className="border-t border-gray-700 pt-2.5 flex items-center justify-between">
-              <span className="text-white font-medium">Total a pagar</span>
-              <span className="text-white font-bold text-xl">{formatPrice(balance.aPagar)}</span>
+            <div className="border-t border-line pt-2.5 flex items-center justify-between">
+              <span className="text-content font-medium">Total a pagar</span>
+              <span className="text-content font-bold text-xl">{formatPrice(balance.aPagar)}</span>
             </div>
 
             {balance.ahorro > 0 && (
