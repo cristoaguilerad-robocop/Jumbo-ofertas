@@ -56,13 +56,13 @@ export default function ListSwitcher() {
       >
         <span className="text-2xl shrink-0">{activeList?.emoji || '🛒'}</span>
         <span className="min-w-0 flex-1">
-          <span className="block text-xl font-bold text-white truncate">
+          <span className="block text-xl font-bold text-content truncate">
             {activeList?.name || 'Mi lista'}
           </span>
         </span>
         <svg
           xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-          className={`w-5 h-5 text-gray-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`w-5 h-5 text-content-dim shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
         >
           <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
         </svg>
@@ -73,7 +73,7 @@ export default function ListSwitcher() {
           {/* Capa para cerrar tocando fuera, sin tapar la barra inferior. */}
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
 
-          <div className="absolute top-full left-0 right-0 mt-2 z-40 bg-gray-800 rounded-2xl shadow-xl border border-gray-700 overflow-hidden">
+          <div className="absolute top-full left-0 right-0 mt-2 z-40 bg-card rounded-2xl shadow-xl border border-line overflow-hidden">
             <div className="max-h-64 overflow-y-auto">
               {lists.map(list => (
                 <div
@@ -89,11 +89,11 @@ export default function ListSwitcher() {
                     <span className="text-lg shrink-0">{list.emoji || '🛒'}</span>
                     <span className="min-w-0 flex-1">
                       <span className={`block text-sm truncate ${
-                        list.id === activeListId ? 'text-green-400 font-medium' : 'text-white'
+                        list.id === activeListId ? 'text-green-400 font-medium' : 'text-content'
                       }`}>
                         {list.name}
                       </span>
-                      <span className="block text-gray-500 text-xs">
+                      <span className="block text-content-faint text-xs">
                         {countsByList[list.id] || 0} productos
                       </span>
                     </span>
@@ -101,7 +101,7 @@ export default function ListSwitcher() {
 
                   <button
                     onClick={() => handleRename(list)}
-                    className="shrink-0 w-8 h-8 rounded-lg text-gray-500 hover:text-gray-300 flex items-center justify-center"
+                    className="shrink-0 w-8 h-8 rounded-lg text-content-faint hover:text-content-soft flex items-center justify-center"
                     aria-label={`Renombrar ${list.name}`}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
@@ -112,7 +112,7 @@ export default function ListSwitcher() {
                   {lists.length > 1 && (
                     <button
                       onClick={() => handleDelete(list)}
-                      className="shrink-0 w-8 h-8 rounded-lg text-gray-500 hover:text-red-400 flex items-center justify-center"
+                      className="shrink-0 w-8 h-8 rounded-lg text-content-faint hover:text-red-400 flex items-center justify-center"
                       aria-label={`Eliminar ${list.name}`}
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
@@ -124,7 +124,7 @@ export default function ListSwitcher() {
               ))}
             </div>
 
-            <div className="border-t border-gray-700">
+            <div className="border-t border-line">
               {creating ? (
                 <form onSubmit={submit} className="p-3 space-y-2">
                   <div className="flex gap-1.5 flex-wrap">
@@ -134,7 +134,7 @@ export default function ListSwitcher() {
                         type="button"
                         onClick={() => setEmoji(e)}
                         className={`w-8 h-8 rounded-lg text-lg flex items-center justify-center ${
-                          emoji === e ? 'bg-green-500/20 ring-1 ring-green-500' : 'bg-gray-700'
+                          emoji === e ? 'bg-green-500/20 ring-1 ring-green-500' : 'bg-muted'
                         }`}
                       >
                         {e}
@@ -148,7 +148,7 @@ export default function ListSwitcher() {
                       onChange={e => setName(e.target.value)}
                       placeholder="Ej: Carrete, Compra mensual"
                       maxLength={40}
-                      className="flex-1 bg-gray-700 text-white rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-500"
+                      className="flex-1 bg-muted text-content rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-500"
                     />
                     <button
                       type="submit"
@@ -162,7 +162,7 @@ export default function ListSwitcher() {
                   <button
                     type="button"
                     onClick={() => { setCreating(false); setError(null) }}
-                    className="text-gray-400 text-xs underline"
+                    className="text-content-dim text-xs underline"
                   >
                     Cancelar
                   </button>
@@ -170,7 +170,7 @@ export default function ListSwitcher() {
               ) : (
                 <button
                   onClick={() => setCreating(true)}
-                  className="w-full px-3 py-3 text-green-400 text-sm font-medium text-left hover:bg-gray-700/50"
+                  className="w-full px-3 py-3 text-green-400 text-sm font-medium text-left hover:bg-muted/50"
                 >
                   + Nueva lista
                 </button>

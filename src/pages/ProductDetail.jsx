@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext'
 import { getCatalogProduct, getPriceHistory, recordPrices } from '../lib/catalogDb'
 import PriceHistory from '../components/PriceHistory'
 import OfferBadge from '../components/OfferBadge'
+import { productImageProps } from '../lib/productImage'
 
 const CATEGORY_EMOJIS = {
   'Lácteos': '🥛', 'Carnes': '🥩', 'Frutas y Verduras': '🥦',
@@ -66,11 +67,11 @@ export default function ProductDetail() {
 
   if (!product) {
     return (
-      <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center gap-4">
+      <div className="min-h-screen bg-canvas flex flex-col items-center justify-center gap-4">
         {lookingUp ? (
           <div className="w-6 h-6 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
         ) : (
-          <p className="text-gray-400">Producto no encontrado.</p>
+          <p className="text-content-dim">Producto no encontrado.</p>
         )}
         <button onClick={() => navigate(-1)} className="text-green-400 text-sm">Volver</button>
       </div>
@@ -95,10 +96,10 @@ export default function ProductDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 pb-nav">
-      <div className="bg-gray-900 px-4 pt-header-sm pb-4">
+    <div className="min-h-screen bg-canvas pb-nav">
+      <div className="bg-surface px-4 pt-header-sm pb-4">
         <div className="max-w-lg mx-auto">
-          <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-gray-400 text-sm">
+          <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-content-dim text-sm">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
               <path fillRule="evenodd" d="M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z" clipRule="evenodd" />
             </svg>
@@ -109,27 +110,27 @@ export default function ProductDetail() {
 
       <div className="max-w-lg mx-auto px-4 space-y-4 pt-2">
         {/* Hero */}
-        <div className="bg-gray-800 rounded-2xl p-6 text-center">
+        <div className="bg-card rounded-2xl p-6 text-center">
           {product.imageUrl ? (
-            <img src={product.imageUrl} alt={product.name} className="w-40 h-40 object-contain mx-auto mb-4 rounded-2xl bg-white p-2" />
+            <img {...productImageProps(product.imageUrl, 192)} alt={product.name} decoding="async" className="w-48 h-48 object-contain mx-auto mb-4 rounded-2xl product-media p-2" />
           ) : (
-            <div className={`w-32 h-32 mx-auto rounded-2xl flex items-center justify-center text-5xl mb-4 ${product.isOnSale ? 'bg-orange-500/10' : 'bg-gray-700'}`}>
+            <div className={`w-40 h-40 mx-auto rounded-2xl flex items-center justify-center text-6xl mb-4 ${product.isOnSale ? 'bg-orange-500/10' : 'bg-muted'}`}>
               {CATEGORY_EMOJIS[product.category] || '🛒'}
             </div>
           )}
-          <h1 className="text-white font-bold text-lg leading-tight">{product.name}</h1>
-          {product.brand && <p className="text-gray-500 text-xs mt-0.5">{product.brand}</p>}
-          <p className="text-gray-400 text-sm mt-1">{product.category} · {product.unit || 'unidad'}</p>
+          <h1 className="text-content font-bold text-lg leading-tight">{product.name}</h1>
+          {product.brand && <p className="text-content-faint text-xs mt-0.5">{product.brand}</p>}
+          <p className="text-content-dim text-sm mt-1">{product.category} · {product.unit || 'unidad'}</p>
 
           <div className="mt-4">
             <div className="flex items-center justify-center gap-3">
-              <span className={`text-3xl font-bold ${product.isOnSale ? 'text-green-400' : 'text-white'}`}>
+              <span className={`text-3xl font-bold ${product.isOnSale ? 'text-green-400' : 'text-content'}`}>
                 {formatPrice(product.currentPrice)}
               </span>
               {product.isOnSale && <OfferBadge percent={product.discountPercent} size="lg" />}
             </div>
             {product.isOnSale && (
-              <p className="text-gray-500 text-sm mt-1">
+              <p className="text-content-faint text-sm mt-1">
                 Normal: <span className="line-through">{formatPrice(product.regularPrice)}</span>
                 {' · '}Ahorras <span className="text-green-400 font-medium">{formatPrice(savings)}</span>
               </p>
@@ -145,42 +146,42 @@ export default function ProductDetail() {
 
         {/* Barcode */}
         {product.barcode && (
-          <div className="bg-gray-800 rounded-2xl p-4 flex items-center gap-3">
-            <span className="text-gray-400 text-sm">Código:</span>
-            <span className="text-white font-mono text-sm tracking-wider">{product.barcode}</span>
+          <div className="bg-card rounded-2xl p-4 flex items-center gap-3">
+            <span className="text-content-dim text-sm">Código:</span>
+            <span className="text-content font-mono text-sm tracking-wider">{product.barcode}</span>
           </div>
         )}
 
         {/* Price target */}
         {inList && (
-          <div className="bg-gray-800 rounded-2xl p-4">
-            <h2 className="text-white font-semibold mb-1">Precio objetivo</h2>
-            <p className="text-gray-400 text-xs mb-3">
+          <div className="bg-card rounded-2xl p-4">
+            <h2 className="text-content font-semibold mb-1">Precio objetivo</h2>
+            <p className="text-content-dim text-xs mb-3">
               Te avisamos cuando el precio baje de este valor.
             </p>
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-content-dim text-sm">$</span>
                 <input
                   type="number"
                   value={targetInput}
                   onChange={e => setTargetInput(e.target.value)}
                   placeholder={String(Math.round(product.currentPrice * 0.9))}
-                  className="w-full bg-gray-700 text-white rounded-xl pl-7 pr-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full bg-muted text-content rounded-xl pl-7 pr-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-green-500"
                 />
               </div>
               <button
                 onClick={handleSaveTarget}
                 disabled={savingTarget || !targetInput}
                 className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                  targetSaved ? 'bg-green-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  targetSaved ? 'bg-green-500 text-white' : 'bg-muted text-content-soft hover:bg-muted-strong'
                 }`}
               >
                 {targetSaved ? '✓ Guardado' : savingTarget ? '...' : 'Guardar'}
               </button>
             </div>
             {listItem?.targetPrice && (
-              <p className="text-gray-400 text-xs mt-2">
+              <p className="text-content-dim text-xs mt-2">
                 Objetivo actual: <span className="text-orange-400 font-medium">{formatPrice(listItem.targetPrice)}</span>
               </p>
             )}
@@ -197,7 +198,7 @@ export default function ProductDetail() {
           <button
             onClick={handleToggle}
             className={`w-full py-4 rounded-2xl font-semibold text-sm transition-all active:scale-[0.98] ${
-              inList ? 'bg-gray-700 text-gray-300' : 'bg-green-500 hover:bg-green-600 text-white shadow-lg shadow-green-500/20'
+              inList ? 'bg-muted text-content-soft' : 'bg-green-500 hover:bg-green-600 text-white shadow-lg shadow-green-500/20'
             }`}
           >
             {inList ? '✓ En mi lista · Quitar' : '+ Agregar a mi lista'}

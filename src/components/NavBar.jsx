@@ -28,11 +28,11 @@ export default function NavBar() {
     `flex flex-col items-center gap-0.5 px-4 py-2 rounded-xl transition-colors ${
       isActive
         ? 'text-green-400'
-        : 'text-gray-400 hover:text-gray-200'
+        : 'text-content-dim hover:text-content'
     }`
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-gray-900 border-t border-gray-800 pb-safe">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-line pb-safe">
       <div className="flex justify-around items-center max-w-lg mx-auto px-2 py-1">
         <NavLink to="/" end className={linkClass}>
           <HomeIcon />

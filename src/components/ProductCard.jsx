@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { formatPrice } from '../data/catalog'
 import OfferBadge from './OfferBadge'
+import { productImageProps } from '../lib/productImage'
 
 const CATEGORY_EMOJIS = {
   'Lácteos': '🥛',
@@ -32,7 +33,7 @@ export default function ProductCard({ product, showAddButton = true, onSelect })
 
   return (
     <div
-      className="bg-gray-800 rounded-2xl p-4 flex items-center gap-3 cursor-pointer hover:bg-gray-750 active:scale-[0.98] transition-all"
+      className="bg-card rounded-2xl p-4 flex items-center gap-3 cursor-pointer hover:bg-card-hover active:scale-[0.98] transition-all"
       onClick={() => onSelect
         ? onSelect(product)
         : navigate(`/product/${product.id}`, { state: { product } })}
@@ -41,14 +42,15 @@ export default function ProductCard({ product, showAddButton = true, onSelect })
           justo lo que uno necesita para reconocerlo de un vistazo. */}
       {product.imageUrl ? (
         <img
-          src={product.imageUrl}
+          {...productImageProps(product.imageUrl, 96)}
           alt={product.name}
           loading="lazy"
-          className="w-20 h-20 rounded-xl object-contain shrink-0 bg-white p-1"
+          decoding="async"
+          className="w-24 h-24 rounded-xl object-contain shrink-0 product-media p-1"
         />
       ) : (
-        <div className={`w-20 h-20 rounded-xl flex items-center justify-center text-3xl shrink-0 ${
-          product.isOnSale ? 'bg-orange-500/10' : 'bg-gray-700'
+        <div className={`w-24 h-24 rounded-xl flex items-center justify-center text-3xl shrink-0 ${
+          product.isOnSale ? 'bg-orange-500/10' : 'bg-muted'
         }`}>
           {CATEGORY_EMOJIS[product.category] || '🛒'}
         </div>
@@ -56,16 +58,16 @@ export default function ProductCard({ product, showAddButton = true, onSelect })
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <p className="text-white text-sm font-medium leading-snug line-clamp-2">
+        <p className="text-content text-sm font-medium leading-snug line-clamp-2">
           {product.name}
         </p>
-        <p className="text-gray-400 text-xs mt-0.5">{product.category}</p>
+        <p className="text-content-dim text-xs mt-0.5">{product.category}</p>
         <div className="flex items-center gap-2 mt-1">
-          <span className={`text-sm font-bold ${product.isOnSale ? 'text-green-400' : 'text-white'}`}>
+          <span className={`text-sm font-bold ${product.isOnSale ? 'text-green-400' : 'text-content'}`}>
             {formatPrice(product.currentPrice)}
           </span>
           {product.isOnSale && (
-            <span className="text-gray-500 text-xs line-through">
+            <span className="text-content-faint text-xs line-through">
               {formatPrice(product.regularPrice)}
             </span>
           )}
@@ -80,7 +82,7 @@ export default function ProductCard({ product, showAddButton = true, onSelect })
           className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all ${
             inList
               ? 'bg-green-500 text-white'
-              : 'bg-gray-700 text-gray-400 hover:bg-green-500/20 hover:text-green-400'
+              : 'bg-muted text-content-dim hover:bg-green-500/20 hover:text-green-400'
           }`}
           aria-label={inList ? 'Quitar de lista' : 'Agregar a lista'}
         >

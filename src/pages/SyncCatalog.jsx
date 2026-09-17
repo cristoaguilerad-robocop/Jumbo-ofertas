@@ -84,12 +84,12 @@ export default function SyncCatalog() {
     : 0
 
   return (
-    <div className="min-h-screen bg-gray-950 pb-nav">
-      <div className="bg-gray-900 px-4 pt-header pb-4">
+    <div className="min-h-screen bg-canvas pb-nav">
+      <div className="bg-surface px-4 pt-header pb-4">
         <div className="max-w-lg mx-auto">
-          <button onClick={() => navigate(-1)} className="text-gray-400 text-sm mb-2">← Volver</button>
-          <h1 className="text-white font-bold text-xl">Catálogo completo</h1>
-          <p className="text-gray-400 text-sm mt-1">
+          <button onClick={() => navigate(-1)} className="text-content-dim text-sm mb-2">← Volver</button>
+          <h1 className="text-content font-bold text-xl">Catálogo completo</h1>
+          <p className="text-content-dim text-sm mt-1">
             Descarga todo el catálogo de Jumbo para buscar y navegar al instante.
           </p>
         </div>
@@ -102,9 +102,9 @@ export default function SyncCatalog() {
           </div>
         )}
 
-        <div className="bg-gray-800 rounded-2xl p-4">
-          <p className="text-gray-400 text-xs">Productos en tu catálogo</p>
-          <p className="text-white text-3xl font-bold mt-1">
+        <div className="bg-card rounded-2xl p-4">
+          <p className="text-content-dim text-xs">Productos en tu catálogo</p>
+          <p className="text-content text-3xl font-bold mt-1">
             {catalogCount === null ? '—' : catalogCount.toLocaleString('es-CL')}
           </p>
         </div>
@@ -118,21 +118,21 @@ export default function SyncCatalog() {
         )}
 
         {!running && (
-          <div className="bg-gray-800 rounded-2xl p-4 space-y-3">
-            <p className="text-gray-300 text-sm">
-              La descarga se detiene sola a los <span className="text-white font-medium">10 minutos</span>.
+          <div className="bg-card rounded-2xl p-4 space-y-3">
+            <p className="text-content-soft text-sm">
+              La descarga se detiene sola a los <span className="text-content font-medium">10 minutos</span>.
               Deja esta pestaña abierta y con la pantalla encendida. Si queda a medias, «Retomar»
               sigue donde quedó.
             </p>
-            <p className="text-gray-500 text-xs">
+            <p className="text-content-faint text-xs">
               Las peticiones pasan por un proxy propio, porque la API de Jumbo no permite que la
               llamen desde otro dominio.
             </p>
-            <div className="border-t border-gray-700 pt-3">
-              <p className="text-gray-400 text-xs mb-2">Secciones excluidas del catálogo:</p>
+            <div className="border-t border-line pt-3">
+              <p className="text-content-dim text-xs mb-2">Secciones excluidas del catálogo:</p>
               <div className="flex flex-wrap gap-1.5">
                 {Object.keys(EXCLUDED_SECTIONS).map(section => (
-                  <span key={section} className="px-2 py-1 rounded-lg bg-gray-700 text-gray-300 text-[11px]">
+                  <span key={section} className="px-2 py-1 rounded-lg bg-muted text-content-soft text-[11px]">
                     {SECTION_LABELS[section] || section}
                   </span>
                 ))}
@@ -141,7 +141,7 @@ export default function SyncCatalog() {
             {resumable && (
               <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3">
                 <p className="text-green-400 text-xs font-medium">Hay una descarga a medias</p>
-                <p className="text-gray-400 text-xs mt-0.5">
+                <p className="text-content-dim text-xs mt-0.5">
                   Quedaron {resumeInfo?.doneCategories?.length || 0} categorías listas
                   {resumeInfo?.totalSaved
                     ? ` y ${resumeInfo.totalSaved.toLocaleString('es-CL')} productos guardados`
@@ -164,16 +164,16 @@ export default function SyncCatalog() {
               <button
                 onClick={() => { clearProgress(); setResumable(false); start(true) }}
                 disabled={!isConfigured}
-                className="w-full bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-gray-300 py-2.5 rounded-xl text-sm"
+                className="w-full bg-muted hover:bg-muted-strong disabled:opacity-40 text-content-soft py-2.5 rounded-xl text-sm"
               >
                 Sincronizar desde cero
               </button>
-              <p className="text-gray-500 text-xs">
+              <p className="text-content-faint text-xs">
                 Se recorre en dos fases: primero las vitrinas de ofertas, después las
                 categorías reales, para que cada producto quede etiquetado por lo que es
                 y no por la promoción en que aparece.
               </p>
-              <p className="text-gray-500 text-xs">
+              <p className="text-content-faint text-xs">
                 «Desde cero» vuelve a recorrer todo y, al terminar completo, borra
                 los productos que Jumbo ya no lista y los artículos de prueba.
                 Conserva los códigos de barras que hayas vinculado escaneando.
@@ -183,9 +183,9 @@ export default function SyncCatalog() {
         )}
 
         {running && (
-          <div className="bg-gray-800 rounded-2xl p-4 space-y-3">
+          <div className="bg-card rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-white font-medium text-sm">
+              <span className="text-content font-medium text-sm">
                 {progress?.phase === 'categories' ? 'Leyendo categorías...'
                   : progress?.phase === 'purging' ? 'Limpiando productos que ya no existen...'
                   : progress?.phase === 'relabeling' ? 'Corrigiendo categorías...'
@@ -195,7 +195,7 @@ export default function SyncCatalog() {
               <span className="text-green-400 font-bold text-sm">{pct}%</span>
             </div>
 
-            <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+            <div className="h-2 bg-muted rounded-full overflow-hidden">
               <div
                 className="h-full bg-green-500 transition-all duration-300"
                 style={{ width: `${pct}%` }}
@@ -204,36 +204,36 @@ export default function SyncCatalog() {
 
             <div className="grid grid-cols-2 gap-3 pt-1">
               <div>
-                <p className="text-gray-500 text-xs">Productos distintos</p>
-                <p className="text-white font-bold">
+                <p className="text-content-faint text-xs">Productos distintos</p>
+                <p className="text-content font-bold">
                   {(progress?.uniqueProducts || 0).toLocaleString('es-CL')}
                 </p>
                 {progress?.totalSaved > progress?.uniqueProducts && (
-                  <p className="text-gray-500 text-[10px] mt-0.5">
+                  <p className="text-content-faint text-[10px] mt-0.5">
                     {progress.totalSaved.toLocaleString('es-CL')} lecturas · un producto
                     aparece en varias categorías
                   </p>
                 )}
               </div>
               <div>
-                <p className="text-gray-500 text-xs">Categorías</p>
-                <p className="text-white font-bold">
+                <p className="text-content-faint text-xs">Categorías</p>
+                <p className="text-content font-bold">
                   {progress?.doneCategories || 0} / {progress?.totalCategories || '—'}
                 </p>
               </div>
               {progress?.productsPerMin > 0 && (
                 <div>
-                  <p className="text-gray-500 text-xs">Velocidad</p>
-                  <p className="text-white font-bold">
+                  <p className="text-content-faint text-xs">Velocidad</p>
+                  <p className="text-content font-bold">
                     {progress.productsPerMin.toLocaleString('es-CL')}
-                    <span className="text-gray-400 font-normal text-xs"> /min</span>
+                    <span className="text-content-dim font-normal text-xs"> /min</span>
                   </p>
                 </div>
               )}
               {progress?.etaMin > 0 && (
                 <div>
-                  <p className="text-gray-500 text-xs">Tiempo restante</p>
-                  <p className="text-white font-bold">
+                  <p className="text-content-faint text-xs">Tiempo restante</p>
+                  <p className="text-content font-bold">
                     ~{progress.etaMin < 60
                       ? `${progress.etaMin} min`
                       : `${Math.floor(progress.etaMin / 60)} h ${progress.etaMin % 60} min`}
@@ -243,13 +243,13 @@ export default function SyncCatalog() {
             </div>
 
             {progress?.currentCategory && (
-              <p className="text-gray-500 text-xs truncate">
+              <p className="text-content-faint text-xs truncate">
                 {progress.currentCategory}
                 {progress.currentPage > 1 && ` · página ${progress.currentPage}`}
               </p>
             )}
             {progress?.excludedCount > 0 && (
-              <p className="text-gray-500 text-xs">
+              <p className="text-content-faint text-xs">
                 {progress.excludedCount} categorías omitidas por filtro
                 {progress.excludedSections?.length
                   ? ` (${progress.excludedSections.map(s => SECTION_LABELS[s] || s).join(', ')})`
@@ -273,7 +273,7 @@ export default function SyncCatalog() {
 
             <button
               onClick={stop}
-              className="w-full bg-gray-700 hover:bg-gray-600 text-gray-300 py-2.5 rounded-xl text-sm"
+              className="w-full bg-muted hover:bg-muted-strong text-content-soft py-2.5 rounded-xl text-sm"
             >
               Detener
             </button>
@@ -298,13 +298,13 @@ export default function SyncCatalog() {
                 </span>
               )}
               {progress.relabeled > 0 && (
-                <span className="block text-gray-400 text-xs mt-1">
+                <span className="block text-content-dim text-xs mt-1">
                   Se fijó la categoría de {progress.relabeled.toLocaleString('es-CL')} productos
                   según la mejor ruta encontrada para cada uno.
                 </span>
               )}
               {progress.promoOnly > 0 && (
-                <span className="block text-gray-400 text-xs mt-1">
+                <span className="block text-content-dim text-xs mt-1">
                   {progress.promoOnly.toLocaleString('es-CL')} productos solo existen dentro de una
                   vitrina promocional en jumbo.cl, así que esa es su única categoría disponible.
                 </span>
@@ -317,7 +317,7 @@ export default function SyncCatalog() {
                 </span>
               )}
               {progress.purged > 0 && (
-                <span className="block text-gray-400 text-xs mt-1">
+                <span className="block text-content-dim text-xs mt-1">
                   Se eliminaron {progress.purged.toLocaleString('es-CL')} productos que ya no
                   existen en Jumbo o quedaban de la fase de prueba.
                 </span>
@@ -334,27 +334,27 @@ export default function SyncCatalog() {
 
         {/* Qué versión de la app está corriendo. Sin esto no había forma de
             distinguir un error real de un build viejo servido desde caché. */}
-        <p className="text-gray-600 text-[11px] text-center">
+        <p className="text-content-faint text-[11px] text-center">
           versión <span className="font-mono">{__BUILD_COMMIT__}</span> · {__BUILD_TIME__} UTC
         </p>
 
         {/* Diagnóstico: qué responde Jumbo desde el servidor del proxy */}
-        <div className="bg-gray-800 rounded-2xl p-4 space-y-3">
+        <div className="bg-card rounded-2xl p-4 space-y-3">
           <div>
-            <p className="text-white font-medium text-sm">Medir velocidad de descarga</p>
-            <p className="text-gray-500 text-xs mt-0.5">
+            <p className="text-content font-medium text-sm">Medir velocidad de descarga</p>
+            <p className="text-content-faint text-xs mt-0.5">
               Compara estrategias de descarga y reporta KB por producto de cada una.
             </p>
           </div>
           <button
             onClick={runDiagnose}
             disabled={diagLoading}
-            className="w-full bg-gray-700 hover:bg-gray-600 text-gray-200 py-2.5 rounded-xl text-sm disabled:opacity-60"
+            className="w-full bg-muted hover:bg-muted-strong text-content py-2.5 rounded-xl text-sm disabled:opacity-60"
           >
             {diagLoading ? 'Midiendo...' : 'Medir estrategias'}
           </button>
           {diag && (
-            <pre className="bg-gray-950 text-gray-300 text-[10px] leading-relaxed rounded-xl p-3 overflow-x-auto max-h-72 overflow-y-auto">
+            <pre className="bg-canvas text-content-soft text-[10px] leading-relaxed rounded-xl p-3 overflow-x-auto max-h-72 overflow-y-auto">
               {JSON.stringify(diag, null, 2)}
             </pre>
           )}
