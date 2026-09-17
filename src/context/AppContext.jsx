@@ -36,6 +36,8 @@ function toItem(row) {
 export function AppProvider({ children }) {
   const [user, setUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
+  // Motivo por el que no se pudo hablar con Supabase, o null si todo va bien.
+  const [backendError, setBackendError] = useState(null)
   const [lists, setLists] = useState([DEFAULT_LIST])
   const [activeListId, setActiveListId] = useState(null)
   // Todos los productos de todas las listas, indexados por `${listId}:${productId}`.
@@ -52,6 +54,9 @@ export function AppProvider({ children }) {
       return
     }
 
+    // Un fallo de conexión aquí dejaba la app en pantallas vacías, indistinguible
+    // de «no hay datos»: el motivo solo se escribía en la consola, que en un
+    // teléfono nadie ve. Ahora se guarda para mostrarlo.
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         setUser(session.user)
@@ -59,17 +64,13 @@ export function AppProvider({ children }) {
         return
       }
       supabase.auth.signInAnonymously().then(({ data, error }) => {
-        if (error) {
-          console.error(
-            'No se pudo iniciar sesión anónima en Supabase:', error.message,
-            '— revisa «Allow anonymous sign-ins» en Authentication.'
-          )
-        } else if (data?.user) {
-          setUser(data.user)
-        }
+        if (error) setBackendError(error.message)
+        else if (data?.user) setUser(data.user)
         setAuthLoading(false)
       })
+      .catch(err => { setBackendError(err.message); setAuthLoading(false) })
     })
+    .catch(err => { setBackendError(err.message); setAuthLoading(false) })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setUser(s?.user ?? null))
     return () => subscription.unsubscribe()
@@ -293,7 +294,7 @@ export function AppProvider({ children }) {
 
   return (
     <AppContext.Provider value={{
-      user, authLoading,
+      user, authLoading, backendError,
       lists, activeList, activeListId,
       selectList, createList, renameList, deleteList,
       countsByList,
